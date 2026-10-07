@@ -174,6 +174,29 @@ grid configurations was positive on **both** the training and the out-of-sample
 half — the rest were negative, which is what the fee maths predicted before any
 of it was measured.
 
+### Shipped defaults = the configuration the research validated
+
+A wider 48-cell sweep (2 timeframes × 4 engines × 3 stop floors × 2 ER floors,
+each split train/validation) left five survivors, and the best-evidenced one is
+the default the CLI and agent now ship:
+
+```
+engine reversion · 15m · stop floor 1.2% · efficiency-ratio gate 0.10
+```
+
+A test asserts that the shipped defaults match that survivor, so the code cannot
+quietly drift away from the result it is based on. Running it right now:
+
+```
+$ nightshift screen
+   XAUUSDT  4114.52  ER 0.03  range 2.44%  RSI 50.5  [SKIP] chop (ER 0.03 < 0.1)
+$ nightshift plan --symbol XAUUSDT
+XAUUSDT: REFUSED — no actionable signal (reversion: z-score 0.41 inside the band)
+```
+
+Both answers are the feature: with a validated configuration and a chopping
+market, the correct action is to stand down.
+
 ## Status & roadmap
 
 | | |

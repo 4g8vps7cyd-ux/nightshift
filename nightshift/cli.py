@@ -23,9 +23,9 @@ from .risk import RiskRefusal
 from .signals import ENGINES, evaluate_all, rsi
 
 DEFAULTS = {
-    "credentials": None, "symbols": None, "timeframe": "15m", "engine": "rsi",
+    "credentials": None, "symbols": None, "timeframe": "15m", "engine": "reversion",
     "leverage": 50, "risk": 1.0, "max_positions": 1, "er_floor": 0.10,
-    "min_stop_pct": 0.0, "max_fee_ratio": 0.30,
+    "min_stop_pct": 1.2, "max_fee_ratio": 0.30,
     "interval": 300, "journal": DEFAULT_PATH, "timeout": 20, "live": False,
 }
 

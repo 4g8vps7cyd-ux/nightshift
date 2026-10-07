@@ -322,5 +322,41 @@ class TestPaperSimulator(unittest.TestCase):
         self.assertEqual(len(aligned["A"]), 7)
 
 
+class TestShippedDefaults(unittest.TestCase):
+    """The default configuration must be the one the research actually validated."""
+
+    def test_agent_defaults_match_the_sweep_survivor(self):
+        from nightshift.agent import AgentConfig
+
+        cfg = AgentConfig()
+        self.assertEqual(cfg.engine, "reversion")
+        self.assertEqual(cfg.timeframe, "15m")
+        self.assertAlmostEqual(cfg.min_stop_pct, 1.2)
+        self.assertAlmostEqual(cfg.er_floor, 0.10)
+        self.assertAlmostEqual(cfg.max_fee_ratio, 0.30)
+
+    def test_cli_defaults_match_the_agent_defaults(self):
+        from nightshift.agent import AgentConfig
+        from nightshift.cli import DEFAULTS
+
+        cfg = AgentConfig()
+        self.assertEqual(DEFAULTS["engine"], cfg.engine)
+        self.assertEqual(DEFAULTS["timeframe"], cfg.timeframe)
+        self.assertAlmostEqual(DEFAULTS["min_stop_pct"], cfg.min_stop_pct)
+        self.assertAlmostEqual(DEFAULTS["er_floor"], cfg.er_floor)
+
+    def test_default_config_satisfies_its_own_fee_gate(self):
+        # 1.2% stop at a 0.06% taker fee -> fees are 10% of risk, well inside the cap.
+        # Target kept at roughly 2x the stop distance so the RR floor also passes.
+        entry = 4130.0
+        stop = entry * (1 - 1.2 / 100)
+        target = entry + (entry - stop) * 2
+        plan = build_plan("XAUUSDT", "long", entry, stop, target, equity=1000.0,
+                          leverage=50, risk_pct=1.0, min_stop_pct=1.2, max_fee_ratio=0.30)
+        self.assertAlmostEqual(plan.stop, stop, places=4)
+        self.assertGreater(plan.rr, 1.5)
+        self.assertLess(plan.margin_usd, 400.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

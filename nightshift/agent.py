@@ -36,13 +36,17 @@ DEFAULT_UNIVERSE = ["XAUUSDT", "BTCUSDT", "ETHUSDT", "SOLUSDT"]
 class AgentConfig:
     universe: list[str] = field(default_factory=lambda: list(DEFAULT_UNIVERSE))
     timeframe: str = "15m"
-    engine: str = "rsi"
+    # Defaults are the configuration that survived the 48-cell train/validation
+    # sweep (see docs/paper/README.md, cell #3): 15m reversion with a 1.2% stop
+    # floor and the efficiency-ratio gate on. Shipping an unvalidated default is
+    # how a repo quietly contradicts its own research.
+    engine: str = "reversion"
     leverage: int = 50
     risk_pct: float = 1.0
     min_rr: float = 1.5
     max_positions: int = 1
     er_floor: float = 0.10
-    min_stop_pct: float = 0.0      # widen stops so fees stay a minor cost
+    min_stop_pct: float = 1.2      # widen stops so fees stay a minor cost
     max_fee_ratio: float = 0.30    # refuse trades whose fees exceed this share of risk
     interval_seconds: int = 300
     journal_path: str = journal.DEFAULT_PATH
