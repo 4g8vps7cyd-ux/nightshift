@@ -196,3 +196,42 @@ two-line formula that would spare thousands of small accounts); document
 `marginMode` on `place-strategy-order`; and surface plan orders — where preset
 TP/SL actually live — in the same object as the position, because every
 integrator looks for them there first.
+
+---
+
+## Standalone field: Role of the LLM / AI in Your Project
+
+Two layers, deliberately separated.
+
+**1 · Runtime: the agent that runs the loop.** NightShift is driven by an LLM
+agent (Hermes Agent) running on **DeepSeek V4.1 Flash** via Nous Research, with a
+second instance on **DeepSeek V4 Pro** hosted on a VPS for 24/7 operation. The
+LLM is what actually operates the desk: it senses market state through tools
+(candles, contract specs, account state), calls the regime screen, decides
+whether any engine's signal is worth acting on, sizes the trade through the risk
+layer, executes the order **with its stop and target attached in the same
+request**, reads the rails back to confirm they exist, then reports and monitors.
+It also does the task orchestration and monitoring cadence — checking position
+distance to stop, and standing down when the market fails the gate.
+
+**2 · Development: the LLM as engineer.** The same agent stack wrote the code,
+diagnosed three exchange-level bugs (inconsistent candle ordering, `31008` on
+TP/SL attachment, preset TP/SL surfacing as plan orders instead of position
+fields), produced the fee/risk diagnosis that turned a negative grid into a
+positive one, and wrote the documentation and tests. Model used: **DeepSeek
+V4.1 Flash**. **Alibaba Qwen** credits have been applied for (the hackathon's
+token sponsor) to build the event/sentiment engine described below.
+
+**What the LLM does not do — on purpose.** It cannot bypass the risk layer. Sizing,
+the liquidation-distance check, the fee-refusal rule and rail construction live in
+deterministic code; an LLM opinion is just one more entry in the engine registry,
+and confidence scales the risk taken, never the leverage used. That boundary is
+the design: language models are strong at context — events, sentiment, earnings,
+cross-market narrative — and must never be the last line of defence on arithmetic.
+Today's decision engines are deterministic rules for exactly that reason; the Qwen
+engine is the next addition, and it will face the same rails.
+
+**Conversational interaction** exists as a first-class path: the same agent
+answers a trader in natural language ("is XAU worth trading tonight?", "why did
+you refuse that setup?"), which is how the journal's refusals become something a
+human actually reads.
