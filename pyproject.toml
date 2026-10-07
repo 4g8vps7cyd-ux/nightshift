@@ -24,7 +24,7 @@ dependencies = []
 nightshift = "nightshift.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/<you>/nightshift"
+Homepage = "https://github.com/4g8vps7cyd-ux/nightshift"
 
 [tool.setuptools]
 packages = ["nightshift"]

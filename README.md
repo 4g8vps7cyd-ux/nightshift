@@ -62,7 +62,7 @@ On an isolated position the stop is the plan and liquidation is the accident. If
 No dependencies — pure Python stdlib (3.10+). It runs on a $5 VPS.
 
 ```bash
-git clone https://github.com/<you>/nightshift && cd nightshift
+git clone https://github.com/4g8vps7cyd-ux/nightshift && cd nightshift
 
 export BITGET_API_KEY=...        # or --credentials creds.json
 export BITGET_API_SECRET=...

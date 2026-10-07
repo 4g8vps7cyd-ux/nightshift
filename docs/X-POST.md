@@ -17,7 +17,7 @@ say "no".
 Live on Bitget, 22 tests, refusals included in the journal.
 
 @Bitget_AI #BitgetAI
-github.com/<you>/nightshift
+github.com/4g8vps7cyd-ux/nightshift
 ```
 
 ## Option B — the specific number (271 chars)
@@ -30,7 +30,7 @@ it loses because it paid fees to end where it started.
 So NightShift gates on regime first.
 
 @Bitget_AI
-github.com/<you>/nightshift
+github.com/4g8vps7cyd-ux/nightshift
 ```
 
 ## Option C — the rail story (247 chars)
@@ -44,7 +44,7 @@ $8.85 equity means a 1% risk budget can't buy one lot of XAU. The bot refuses
 instead of over-risking. Refusals are journaled like trades.
 
 @Bitget_AI
-github.com/<you>/nightshift
+github.com/4g8vps7cyd-ux/nightshift
 ```
 
 ---
@@ -108,7 +108,7 @@ erases five winners. The maths only works at 800–2000x, which Bitget doesn't
 allow. So: single direction, hard rails.
 
 @Bitget_AI #BitgetAI
-github.com/<you>/nightshift
+github.com/4g8vps7cyd-ux/nightshift
 ```
 
 ---
