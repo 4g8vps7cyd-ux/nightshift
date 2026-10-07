@@ -54,8 +54,8 @@ a 30-day window is one regime. This is evidence, not proof.
 ## The finding that made the difference
 
 The first grid run was negative in **every** configuration — momentum at 15m
-lost money with a Sharpe near −24. The cause was not prediction, it was
-arithmetic:
+lost money with a Sharpe worse than −20 on the training half. The cause was not
+prediction, it was arithmetic:
 
 ```
 fees per round trip = notional × fee_rate × 2
@@ -80,9 +80,10 @@ both are in `risk.py`:
    1.2%), which also shrinks position size to keep the risk constant.
 2. **`max_fee_ratio`** — refuse the trade outright when fees would still exceed
    that share of the risk (default 30%). The momentum baseline produced **741
-   such refusals**, which is the rail doing its job and is why its fee bill fell
-   from a naive run's $1 144 (see `paper_15m_momentum.json`, the pre-rail run)
-   to $239.
+   such refusals**, and paid **238.95 USDT in fees on 172 trades** — a bill
+   larger than the entire pooled paper capital of any single symbol account.
+   That is the rail doing its job, and the reason the tuned run's fee bill is
+   97.93 USDT on 141 trades instead.
 
 ## Train / validation grid
 
@@ -136,7 +137,7 @@ python -m nightshift.cli --symbols XAUUSDT,BTCUSDT,ETHUSDT,SOLUSDT \
     --engine reversion --min-stop-pct 1.2 \
     paper --timeframe 15m --pages 6 --out docs/paper/paper_15m_reversion.json
 
-# fee-blind baseline (shows what the fee rail is preventing)
+# fee-blind baseline (shows what the fee rail has to refuse, and what it costs)
 python -m nightshift.cli --symbols XAUUSDT,BTCUSDT,ETHUSDT,SOLUSDT \
     --engine momentum paper --timeframe 15m --pages 6 \
     --out docs/paper/paper_15m_momentum_baseline.json
