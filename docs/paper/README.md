@@ -48,6 +48,15 @@ Per-symbol Sharpe for the winning configuration:
 | ETHUSDT | 39 | +3.69 |
 | SOLUSDT | 52 | +2.85 |
 
+### Equity curves
+
+![NightShift paper equity — reversion, 15m, stop floor 1.2%](equity_15m_reversion.svg)
+
+![NightShift paper equity — momentum baseline, no stop floor](equity_15m_momentum_baseline.svg)
+
+Regenerate either with `python -m scripts.chart <log.json> <out.svg>` — the chart
+is built from the trade log by stdlib string assembly, so two runs can be diffed.
+
 Read that honestly: **the edge is concentrated in SOL and ETH**, XAU loses, and
 a 30-day window is one regime. This is evidence, not proof.
 
