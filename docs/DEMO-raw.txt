@@ -1,0 +1,114 @@
+=== nightshift 0.1.0 · live demo on Bitget (real keys, read-only commands) ===
+cut: '"': No such file or directory
+--- host: Linux 6.8.0-138-generic / python  ---
+
+### 1. unit tests
+Ran 22 tests in 0.005s
+
+OK
+
+### 2. screen (regime gate = whether to trade at all)
+   XAUUSDT     4123.33  ER 0.42  range  1.54%  RSI  29.1  [TRADEABLE] down with structure (ER 0.42, range 1.54%)
+              resistance    4167.25  touches 64  breaks  0  bounce  0.22%
+              resistance    4169.58  touches 12  breaks  0  bounce  0.28%
+              resistance    4179.68  touches  2  breaks  0  bounce  0.12%
+   BTCUSDT    83649.60  ER 0.32  range  3.75%  RSI  24.4  [TRADEABLE] down with structure (ER 0.32, range 3.75%)
+              support      83571.70  touches  2  breaks  0  bounce  0.41%
+              resistance   86633.44  touches  5  breaks  0  bounce  0.46%
+              resistance   84205.53  touches 24  breaks  1  bounce  0.35%
+              resistance   86382.23  touches 17  breaks  2  bounce  0.39%
+   ETHUSDT     2594.92  ER 0.24  range  5.22%  RSI  22.8  [TRADEABLE] down with structure (ER 0.24, range 5.22%)
+              resistance    2622.98  touches  3  breaks  0  bounce  0.45%
+              resistance    2618.29  touches 18  breaks  1  bounce  0.30%
+              resistance    2691.26  touches 19  breaks  2  bounce  0.26%
+   SOLUSDT      117.59  ER 0.14  range  4.30%  RSI  29.9  [TRADEABLE] down with structure (ER 0.14, range 4.30%)
+              support        117.54  touches  3  breaks  0  bounce  0.21%
+              resistance     121.89  touches  6  breaks  0  bounce  0.50%
+              resistance     118.81  touches 10  breaks  2  bounce  1.04%
+              resistance     121.37  touches  8  breaks  2  bounce  0.34%
+
+### 3. signals --symbols XAUUSDT (every engine, with reasoning)
+
+== XAUUSDT @ 4123.3300 ==
+  momentum    short  conf 0.60  close 4123.33 broke 24-bar low 4125.67
+  reversion   flat   conf 0.00  z-score -1.74 inside the band
+  rsi         flat   conf 0.00  RSI 29.1 — no extreme with confirmation
+  exhaustion  flat   conf 0.00  no spike (-0.32% in 5 bars)
+
+### 4. plan --symbol XAUUSDT --engine rsi (the order it would send)
+XAUUSDT: REFUSED — direction 'flat' is not long/short
+
+### 5. watch (the LIVE position this agent is managing, rails read back from Bitget)
+{
+  "symbol": "XAUUSDT",
+  "holdSide": "long",
+  "size": 0.05,
+  "entry": 4128.61,
+  "mark": 4123.26,
+  "uPnl": -0.2675,
+  "liq": 4068.823209975865,
+  "rails": {
+    "stop_loss": 4120.0,
+    "take_profit": 4158.0
+  },
+  "stopDistancePct": 0.079
+}
+
+### 6. review (expectancy + self-critique)
+{
+  "trades": 1,
+  "wins": 1,
+  "losses": 0,
+  "winRate": 1.0,
+  "avgWin": 0.57,
+  "avgLoss": 0.0,
+  "expectancy": 0.57,
+  "grossWin": 0.57,
+  "grossLoss": 0,
+  "refusals": 0,
+  "byEngine": {
+    "manual": {
+      "n": 1,
+      "pnl": 0.57,
+      "wins": 1,
+      "winRate": 1.0
+    }
+  }
+}
+
+- 1 closed trades, win rate 100%, expectancy +0.5700 USDT/trade
+- engine manual: 1 trades, 100% win, +0.570 USDT -> keep
+   XAUUSDT     4123.98  ER 0.42  range  1.55%  RSI  29.6  [TRADEABLE] down with structure (ER 0.42, range 1.55%)
+              support       4123.59  touches 40  breaks  0  bounce  0.08%
+              resistance    4167.25  touches 64  breaks  0  bounce  0.22%
+              resistance    4169.58  touches 12  breaks  0  bounce  0.28%
+              resistance    4179.68  touches  2  breaks  0  bounce  0.12%
+   BTCUSDT    83764.20  ER 0.26  range  3.75%  RSI  27.2  [TRADEABLE] down with structure (ER 0.26, range 3.75%)
+              support      83571.70  touches  2  breaks  0  bounce  0.41%
+              resistance   86633.44  touches  5  breaks  0  bounce  0.46%
+              resistance   84205.53  touches 24  breaks  1  bounce  0.35%
+              resistance   86382.23  touches 17  breaks  2  bounce  0.39%
+   ETHUSDT     2598.15  ER 0.21  range  5.22%  RSI  24.3  [TRADEABLE] down with structure (ER 0.21, range 5.22%)
+              resistance    2622.98  touches  3  breaks  0  bounce  0.45%
+              resistance    2618.29  touches 18  breaks  1  bounce  0.30%
+              resistance    2691.26  touches 19  breaks  2  bounce  0.26%
+   SOLUSDT      117.77  ER 0.10  range  4.30%  RSI  32.2  [SKIP] chop (ER 0.10 < 0.1) — fees would eat the edge
+              support        117.54  touches  3  breaks  0  bounce  0.21%
+              resistance     121.89  touches  6  breaks  0  bounce  0.50%
+              resistance     118.81  touches 10  breaks  2  bounce  1.04%
+              resistance     121.37  touches  8  breaks  2  bounce  0.34%
+
+### signals XAU
+
+== XAUUSDT @ 4123.9800 ==
+  momentum    short  conf 0.60  close 4123.98 broke 24-bar low 4125.67
+  reversion   flat   conf 0.00  z-score -1.70 inside the band
+  rsi         flat   conf 0.00  RSI 29.6 — no extreme with confirmation
+  exhaustion  flat   conf 0.00  no spike (-0.30% in 5 bars)
+
+### plan (rsi)
+XAUUSDT: REFUSED — no actionable signal (rsi: RSI 29.6 — no extreme with confirmation)
+
+### plan (momentum)
+XAUUSDT: REFUSED — computed size is zero — widen risk or tighten the stop
+FIXED

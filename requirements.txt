@@ -1,0 +1,11 @@
+# NightShift has no third-party runtime dependencies — pure Python stdlib.
+#
+# It runs on a bare VPS with nothing but CPython 3.10+:
+#
+#     python3 -m nightshift.cli screen
+#
+# Nothing to install. That is deliberate: an autonomous agent that trades money
+# should have as few moving parts as possible between the market and the order.
+#
+# Optional, for development only:
+#     pip install pytest      # if you prefer pytest over unittest

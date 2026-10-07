@@ -1,0 +1,17 @@
+# Journal, credentials and local state must never reach a public repo.
+journal.jsonl
+*.jsonl
+creds.json
+credentials.json
+.env
+.env.*
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

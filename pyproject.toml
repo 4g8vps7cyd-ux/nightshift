@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nightshift"
+version = "0.1.0"
+description = "Agentic trading desk that screens the regime, attaches rails with the entry, and journals every refusal."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Vandy Suryanto" }]
+keywords = ["trading", "agent", "bitget", "risk-management", "hackathon"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+# No runtime dependencies: stdlib only, so it runs on a bare VPS.
+dependencies = []
+
+[project.scripts]
+nightshift = "nightshift.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/<you>/nightshift"
+
+[tool.setuptools]
+packages = ["nightshift"]
