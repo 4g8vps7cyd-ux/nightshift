@@ -52,7 +52,16 @@ XAUUSDT: REFUSED — computed size is zero — widen risk or tighten the stop
 **5. Never a stop beyond liquidation.**
 On an isolated position the stop is the plan and liquidation is the accident. If the accident would arrive first, the trade is refused. (With $8.85 equity and a 1% risk budget, the budget is **$0.088** — below one lot for most XAU stops. The agent refuses rather than over-risking. That is the rail working, and it is the single most useful thing this bot has told its owner.)
 
-**6. Dry-run by default.**
+**6. Fees are a strategy input, not a footnote.**
+`fees / risk = (entry × 2 × fee_rate) / stop_distance` — the position size
+cancels. With a 0.06% taker fee, a 0.12% stop means **fees equal the entire risk
+budget**: every trade must win twice to break even. So `risk.py` enforces a
+floor on stop distance (`--min-stop-pct`, widening the stop and shrinking size to
+keep risk constant) and refuses any setup where fees would still exceed
+`--max-fee-ratio` of the risk. This single rail turned a −3.19 Sharpe drift into
+**+4.17** on the same data — see [`docs/paper/`](docs/paper/README.md).
+
+**7. Dry-run by default.**
 `--live` is required to touch money. Even then, `--max-positions` is enforced.
 
 ---
@@ -75,7 +84,8 @@ python -m nightshift.cli once                            # one cycle (dry-run)
 python -m nightshift.cli run --cycles 12 --live           # the 24/7 loop
 python -m nightshift.cli watch                            # positions vs their rails
 python -m nightshift.cli review                           # expectancy + lessons
-python -m unittest discover -s tests                     # 22 tests, no network
+python -m nightshift.cli paper --timeframe 15m --pages 6   # walk-forward paper run
+python -m unittest discover -s tests                     # 39 tests, no network
 ```
 
 Shared options work **before or after** the subcommand (`nightshift --symbols XAUUSDT screen`
@@ -146,12 +156,30 @@ The track asks for an agent whose LLM **senses market conditions, reasons indepe
 
 ---
 
+## Validation — 30 days of walk-forward paper trading
+
+Real Bitget candles, no lookahead, taker fees charged on both legs, stops
+checked before targets inside a bar. Full method and caveats:
+[`docs/paper/`](docs/paper/README.md).
+
+| Config | Trades | Win rate | Sharpe | Max DD | Expectancy | Fees paid |
+|---|---|---|---|---|---|---|
+| **15m · reversion · stop ≥ 1.2%** | 141 | 43.97% | **+4.17** | **2.22%** | **+1.07 USDT** | 97.93 USDT |
+| 15m · momentum (no stop floor) | 172 | 37.79% | −3.19 | 3.55% | −0.59 USDT | 238.95 USDT |
+| 1H · reversion · stop ≥ 1.2% | 85 | 35.29% | +0.028 | 2.20% | +0.01 USDT | 52.87 USDT |
+
+Two honest notes that matter more than the headline: the edge is concentrated in
+**SOL and ETH** (XAU lost money in the winning configuration), and one of twelve
+grid configurations was positive on **both** the training and the out-of-sample
+half — the rest were negative, which is what the fee maths predicted before any
+of it was measured.
+
 ## Status & roadmap
 
 | | |
 |---|---|
-| Working today | regime gate, 4 signal engines, rail-checked execution with preset TP/SL, live position/rails readback, journal + review, Telegram alerts, 22 tests |
-| Next | LLM-as-engine (Qwen) for event/sentiment reasoning, Agent Hub / MCP transport for tokenized US stocks, multi-position portfolio caps, alerting on rail proximity |
+| Working today | regime gate, 4 signal engines, fee-aware rail-checked execution with preset TP/SL, live position/rails readback, walk-forward paper trading with Sharpe/Sortino/drawdown, journal + review, Telegram alerts, 39 tests |
+| Next | LLM-as-engine (Qwen) for event/sentiment reasoning, Agent Hub / MCP transport for tokenized US stocks, maker (limit) entries to cut the fee bill to a third, multi-position portfolio caps, rail-proximity alerts |
 
 ## Safety notice
 

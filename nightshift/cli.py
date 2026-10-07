@@ -25,6 +25,7 @@ from .signals import ENGINES, evaluate_all, rsi
 DEFAULTS = {
     "credentials": None, "symbols": None, "timeframe": "15m", "engine": "rsi",
     "leverage": 50, "risk": 1.0, "max_positions": 1, "er_floor": 0.10,
+    "min_stop_pct": 0.0, "max_fee_ratio": 0.30,
     "interval": 300, "journal": DEFAULT_PATH, "timeout": 20, "live": False,
 }
 
@@ -71,6 +72,8 @@ def _agent(args) -> NightShiftAgent:
         risk_pct=_opt(args, "risk"),
         max_positions=_opt(args, "max_positions"),
         er_floor=_opt(args, "er_floor"),
+        min_stop_pct=_opt(args, "min_stop_pct"),
+        max_fee_ratio=_opt(args, "max_fee_ratio"),
         interval_seconds=_opt(args, "interval"),
         journal_path=_opt(args, "journal"),
     )
@@ -141,6 +144,55 @@ def cmd_watch(args) -> int:
     return 0
 
 
+def cmd_paper(args) -> int:
+    """Walk-forward paper trading over historical candles. No orders are sent."""
+    from .paper import align_topics, run_paper
+
+    agent = _agent(args)
+    pages = getattr(args, "pages", 6)
+    start_equity = getattr(args, "paper_equity", 1000.0)
+    print(f"# fetching history for {', '.join(agent.cfg.universe)} "
+          f"({agent.cfg.timeframe}, up to {pages} pages of 1000 bars)")
+    candles = {s: agent.client.candles_history(s, agent.cfg.timeframe, pages=pages)
+               for s in agent.cfg.universe}
+    for symbol, rows in candles.items():
+        print(f"#   {symbol}: {len(rows)} bars")
+    candles = align_topics({s: rows for s, rows in candles.items() if len(rows) > 200})
+    if not candles:
+        print("not enough history to simulate", file=sys.stderr)
+        return 2
+
+    out = run_paper(candles, engine=agent.cfg.engine, timeframe=agent.cfg.timeframe,
+                    start_equity=start_equity, risk_pct=agent.cfg.risk_pct,
+                    leverage=agent.cfg.leverage, er_floor=agent.cfg.er_floor,
+                    min_stop_pct=agent.cfg.min_stop_pct,
+                    max_fee_ratio=agent.cfg.max_fee_ratio,
+                    max_hold=getattr(args, "max_hold", 96))
+    print(json.dumps({"engine": out["engine"], "timeframe": out["timeframe"],
+                      "window": out["window"], "convention": out["convention"],
+                      "aggregate": out["aggregate"],
+                      "totals": out["totals"],
+                      "config": {"riskPct": agent.cfg.risk_pct, "leverage": agent.cfg.leverage,
+                                 "erFloor": agent.cfg.er_floor,
+                                 "minStopPct": agent.cfg.min_stop_pct,
+                                 "maxFeeRatio": agent.cfg.max_fee_ratio},
+                      "perSymbol": {k: {kk: vv for kk, vv in v.items()
+                                        if kk not in ("log", "refusalLog")}
+                                    for k, v in out["perSymbol"].items()}}, indent=2))
+    target = getattr(args, "out", None)
+    if target:
+        out["config"] = {"engine": agent.cfg.engine, "timeframe": agent.cfg.timeframe,
+                         "universe": agent.cfg.universe, "riskPct": agent.cfg.risk_pct,
+                         "leverage": agent.cfg.leverage, "erFloor": agent.cfg.er_floor,
+                         "minStopPct": agent.cfg.min_stop_pct,
+                         "maxFeeRatio": agent.cfg.max_fee_ratio,
+                         "paperEquityPerSymbol": start_equity}
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(out, fh, indent=2)
+        print(f"# full log written to {target}")
+    return 0
+
+
 def cmd_review(args) -> int:
     """Expectancy, per-engine attribution, and plain-language lessons."""
     print(json.dumps(review(_opt(args, "journal")), indent=2))
@@ -164,6 +216,10 @@ def _shared_options() -> argparse.ArgumentParser:
                         help="percent of equity per trade")
     common.add_argument("--max-positions", type=int, default=argparse.SUPPRESS)
     common.add_argument("--er-floor", type=float, default=argparse.SUPPRESS)
+    common.add_argument("--min-stop-pct", type=float, default=argparse.SUPPRESS,
+                        help="widen stops to at least this %% of price so fees stay minor")
+    common.add_argument("--max-fee-ratio", type=float, default=argparse.SUPPRESS,
+                        help="refuse trades whose fees exceed this share of risk (default 0.30)")
     common.add_argument("--interval", type=int, default=argparse.SUPPRESS)
     common.add_argument("--journal", default=argparse.SUPPRESS)
     common.add_argument("--timeout", type=int, default=argparse.SUPPRESS)
@@ -190,6 +246,7 @@ def build_parser() -> argparse.ArgumentParser:
                 ("once", cmd_once, "one full cycle"),
                 ("run", cmd_run, "unattended loop"),
                 ("watch", cmd_watch, "positions vs rails"),
+                ("paper", cmd_paper, "walk-forward paper trading on history"),
                 ("review", cmd_review, "expectancy + lessons")]
     for name, fn, helptext in commands:
         sp = sub.add_parser(name, parents=[common], help=helptext)
@@ -197,6 +254,14 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--symbol", required=True)
         if name == "run":
             sp.add_argument("--cycles", type=int, default=None)
+        if name == "paper":
+            sp.add_argument("--pages", type=int, default=6,
+                            help="history pages of 1000 bars to fetch (default 6)")
+            sp.add_argument("--max-hold", type=int, default=96,
+                            help="bar time-stop for a position (default 96)")
+            sp.add_argument("--paper-equity", type=float, default=1000.0,
+                            help="starting paper equity per symbol")
+            sp.add_argument("--out", default=None, help="write the full JSON log here")
         sp.set_defaults(func=fn)
     return p
 

@@ -90,8 +90,24 @@ def build_plan(symbol: str, action: str, entry: float, stop: float, target: floa
                equity: float, *, leverage: int = 50, risk_pct: float = 1.0,
                min_size: float = 0.0, size_step: float = 0.0, price_place: int = 2,
                confidence: float = 1.0, max_margin_pct: float = 40.0,
-               min_rr: float = 1.5) -> Plan:
-    """Turn a directional idea into an executable, rail-checked order plan."""
+               min_rr: float = 1.5, min_stop_pct: float = 0.0, fee_rate: float = 0.0006,
+               max_fee_ratio: float = 0.30) -> Plan:
+    """Turn a directional idea into an executable, rail-checked order plan.
+
+    Two rails here are unusual and worth stating plainly, because they are the
+    ones that decide whether a strategy survives contact with a real fee
+    schedule:
+
+    * ``min_stop_pct`` widens a too-tight stop. Fee cost per round trip is
+      ``notional × fee_rate × 2``, while risk is ``size × stop_distance`` — so
+      ``fees / risk = (entry × 2 × fee_rate) / stop_distance``, independent of
+      position size. A 0.12% stop on a 0.06% taker fee means **fees equal the
+      entire risk budget**: every trade starts out needing to win twice to
+      break even. A floor on the stop distance is the only honest fix.
+    * ``max_fee_ratio`` refuses the trade outright when fees would still eat
+      more than that share of the risk. Refusing to trade a fee-dominated setup
+      is a strategy decision, and it belongs in code, not in a footnote.
+    """
     if action not in ("long", "short"):
         raise RiskRefusal(f"action {action!r} is not tradeable")
     notes: list[str] = []
@@ -104,6 +120,18 @@ def build_plan(symbol: str, action: str, entry: float, stop: float, target: floa
     if action == "short" and stop <= entry:
         raise RiskRefusal(f"short stop {stop} must sit above entry {entry}")
 
+    if min_stop_pct > 0:
+        min_distance = entry * (min_stop_pct / 100.0)
+        if abs(entry - stop) < min_distance:
+            original = stop
+            stop = entry - min_distance if action == "long" else entry + min_distance
+            if target:
+                rr_target = abs(target - entry) / abs(entry - original) if abs(entry - original) else 2.0
+                target = entry + min_distance * rr_target if action == "long" \
+                    else entry - min_distance * rr_target
+            notes.append(f"stop widened {abs(entry - original) / entry * 100:.2f}% -> "
+                         f"{min_stop_pct:.2f}% so fees stay a minor cost")
+
     size = position_size(equity, risk_pct, entry, stop, min_size=min_size,
                          size_step=size_step, confidence=confidence)
     if size <= 0:
@@ -114,6 +142,14 @@ def build_plan(symbol: str, action: str, entry: float, stop: float, target: floa
     risk_usd = size * abs(entry - stop)
     reward_usd = size * abs(target - entry)
     rr = reward_usd / risk_usd if risk_usd else 0.0
+
+    fee_cost = size * entry * fee_rate * 2.0
+    if risk_usd and fee_cost / risk_usd > max_fee_ratio:
+        raise RiskRefusal(
+            f"fees {fee_cost:.2f} USDT would be {fee_cost / risk_usd * 100:.0f}% of the "
+            f"{risk_usd:.2f} USDT risk (cap {max_fee_ratio * 100:.0f}%) — fee-dominated setup")
+    notes.append(f"fees {fee_cost:.2f} USDT = {fee_cost / risk_usd * 100:.0f}% of risk"
+                 if risk_usd else "fees unmeasurable")
 
     notional = size * entry
     margin = notional / leverage

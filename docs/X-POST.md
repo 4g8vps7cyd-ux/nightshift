@@ -20,14 +20,13 @@ Live on Bitget, 22 tests, refusals included in the journal.
 github.com/4g8vps7cyd-ux/nightshift
 ```
 
-## Option B — the specific number (271 chars)
+## Option B — the specific number (271 chars) — RECOMMENDED
 
 ```
-Measured on Bitget perps: intraday efficiency ratio 0.00–0.06 on XAU/BTC/ETH/SOL.
-That's chop. In chop a directional bot doesn't lose because it predicted wrong —
-it loses because it paid fees to end where it started.
+Measured on Bitget perps: fees/risk = (entry × 2 × fee_rate) / stop_distance.
+Size cancels. A 0.12% stop on a 0.06% taker fee = fees eat 100% of the risk.
 
-So NightShift gates on regime first.
+Added a stop floor + a fee-refusal rail: same data went from Sharpe −3.19 to +4.17.
 
 @Bitget_AI
 github.com/4g8vps7cyd-ux/nightshift

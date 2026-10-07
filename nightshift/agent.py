@@ -42,6 +42,8 @@ class AgentConfig:
     min_rr: float = 1.5
     max_positions: int = 1
     er_floor: float = 0.10
+    min_stop_pct: float = 0.0      # widen stops so fees stay a minor cost
+    max_fee_ratio: float = 0.30    # refuse trades whose fees exceed this share of risk
     interval_seconds: int = 300
     journal_path: str = journal.DEFAULT_PATH
 
@@ -88,7 +90,9 @@ class NightShiftAgent:
                           leverage=min(self.cfg.leverage, spec["max_leverage"]),
                           risk_pct=self.cfg.risk_pct, min_size=spec["min_size"],
                           size_step=spec["size_step"], price_place=spec["price_place"],
-                          confidence=signal.confidence, min_rr=self.cfg.min_rr)
+                          confidence=signal.confidence, min_rr=self.cfg.min_rr,
+                          min_stop_pct=self.cfg.min_stop_pct,
+                          max_fee_ratio=self.cfg.max_fee_ratio)
 
     def open(self, plan: Plan, reason: str = "") -> dict[str, Any]:
         """Send entry + rails together, then verify the rails exist."""

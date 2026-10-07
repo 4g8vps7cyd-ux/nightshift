@@ -139,6 +139,38 @@ class Bitget:
         out.sort(key=lambda x: x[0])
         return out
 
+    def candles_history(self, symbol: str, granularity: str = "15m", pages: int = 6,
+                        limit: int = 1000) -> list[list[float]]:
+        """Page backwards through history, newest page first, merged and sorted.
+
+        One request returns at most 1000 bars, so a multi-week paper run needs
+        pagination. Pages are keyed by timestamp and merged in a dict: an
+        exchange that overlaps or repeats a boundary bar cannot corrupt the
+        series or duplicate a trade.
+        """
+        rows: dict[float, list[float]] = {}
+        end_time: float | None = None
+        for _ in range(max(1, pages)):
+            query = {"symbol": symbol, "productType": self.product_type,
+                     "granularity": granularity, "limit": str(limit)}
+            if end_time:
+                query["endTime"] = str(int(end_time))
+            try:
+                data = self._call("GET", "/api/v2/mix/market/candles", query, signed=False)
+            except BitgetError:
+                break
+            if not data:
+                break
+            for r in data:
+                rows[float(r[0])] = [float(r[0]), float(r[1]), float(r[2]),
+                                     float(r[3]), float(r[4]), float(r[5])]
+            oldest = min(float(r[0]) for r in data)
+            if end_time is not None and oldest >= end_time:
+                break                      # no forward progress, stop instead of looping
+            end_time = oldest
+            time.sleep(0.25)               # be a good citizen on a public endpoint
+        return [rows[ts] for ts in sorted(rows)]
+
     def contract_spec(self, symbol: str) -> dict:
         """Tick/size rules — required so orders are not rejected for precision."""
         data = self._call("GET", "/api/v2/mix/market/contracts",
