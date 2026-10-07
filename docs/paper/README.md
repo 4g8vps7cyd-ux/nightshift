@@ -124,6 +124,35 @@ genuinely out-of-sample for that choice.
   it would improve every row, and it is the first thing a live deployment would
   target (limit entries).
 
+## Configuration search — 48 cells, train vs validation
+
+`search.json` holds a wider sweep: 2 timeframes × 4 engines × 3 stop floors × 2
+efficiency-ratio floors, each run on the first 70% of the bars (train) and the
+last 30% (validation). **5 of 48 cells were positive on both halves.**
+
+| # | Config | Train (n / Sharpe / exp / maxDD) | Validation (n / Sharpe / exp / maxDD) |
+|---|---|---|---|
+| 1 | **1H exhaustion, stop ≥ 1.2%, ER ≥ 0** | 61 / **+5.23** / +3.07 / 1.54% | 15 / **+4.08** / +1.14 / 0.70% |
+| 2 | 15m exhaustion, no stop floor, ER ≥ 0.1 | 52 / +4.01 / +1.54 / 1.36% | 7 / +3.00 / +1.62 / 0.29% |
+| 3 | **15m reversion, stop ≥ 1.2%, ER ≥ 0.1** | 106 / +2.84 / +0.71 / 2.26% | 35 / **+4.68** / +1.14 / 0.96% |
+| 4 | 15m reversion, stop ≥ 1.2%, ER ≥ 0 | 107 / +1.85 / +0.46 / 2.41% | 35 / +4.68 / +1.14 / 0.96% |
+| 5 | 15m exhaustion, no stop floor, ER ≥ 0 | 55 / +3.10 / +1.20 / 2.05% | 8 / +1.84 / +0.88 / 0.40% |
+
+Three things are worth reading out of that table:
+
+- **The exhaustion engine appears in three of the five survivors**, and a wide
+  stop floor in the two highest-Sharpe cells. That coherence is more informative
+  than any single cell: it is the same mechanism as the fee finding above —
+  fading a spike with a wide stop pays; chasing a trend with a tight stop does
+  not.
+- **Cell #3 has the most evidence**: 106 train trades and 35 validation trades,
+  positive on both, with the validation half *better* than the training half
+  (Sharpe +2.84 → +4.68). Small samples elsewhere (7–15 validation trades) mean
+  those Sharpes carry wide error bars.
+- **A 5-in-48 hit rate is partly what multiple testing produces.** At this sample
+  size one or two false positives should be expected; the survivors are the
+  candidates, not the conclusion.
+
 ## What this does *not* prove
 
 - **30 days is one regime.** These are range/trend-down conditions, not a
