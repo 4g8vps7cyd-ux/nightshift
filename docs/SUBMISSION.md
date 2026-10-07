@@ -26,7 +26,15 @@ Track: **Agentic Trading** · Sub-theme: **Cross-Asset Execution Agent**
 
 ---
 
-## Project Description (paste into the form)
+## Project Description
+
+> **Note:** the form requires a **five-part** answer with observed / estimated /
+> targeted labels on every figure. The text **actually submitted** lives in
+> [`PROJECT-DESCRIPTION.md`](PROJECT-DESCRIPTION.md), together with the standalone
+> "Role of the LLM / AI in Your Project" field.
+>
+> The three-part sketch **below this note is an earlier draft**, kept for the
+> record only. Where the two disagree, `PROJECT-DESCRIPTION.md` is what was sent.
 
 ### 1. What it is
 
