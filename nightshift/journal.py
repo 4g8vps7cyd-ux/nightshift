@@ -3,10 +3,18 @@
 Every decision is appended as one JSON line — including the refusals. A journal
 that only records winners is marketing; recording *why* a trade was skipped is
 what lets the next session learn anything.
+
+Each record is **hash-chained** to the one before it (``prev`` / ``hash``), so a
+journal that has been edited after the fact no longer verifies. That matters the
+moment real money is involved: an audit trail nobody can rewrite is the only
+kind worth showing. ``verify()`` walks the chain and returns the first index that
+does not add up. Records written before the chain existed are counted as
+``unchained`` rather than being silently blessed or treated as tampering.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -14,14 +22,74 @@ from dataclasses import asdict
 from typing import Any, Iterable
 
 DEFAULT_PATH = os.environ.get("NIGHTSHIFT_JOURNAL", "journal.jsonl")
+GENESIS = "0" * 64
+
+
+def _digest(row: dict[str, Any]) -> str:
+    """SHA-256 over the canonical form of a record, ignoring its own ``hash``."""
+    body = {k: v for k, v in row.items() if k != "hash"}
+    blob = json.dumps(body, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def _last_hash(path: str) -> str:
+    """Hash of the newest chained record, or GENESIS when the chain starts here."""
+    if not os.path.exists(path):
+        return GENESIS
+    tail = ""
+    with open(path, "rb") as fh:
+        fh.seek(0, os.SEEK_END)
+        size = fh.tell()
+        fh.seek(max(0, size - 8192))
+        tail = fh.read().decode("utf-8", "ignore")
+    for line in reversed(tail.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("hash"):
+            return row["hash"]
+        break                      # newest row is legacy -> chain starts fresh
+    return GENESIS
 
 
 def record(event: str, payload: dict[str, Any], path: str = DEFAULT_PATH) -> dict:
     row = {"ts": time.time(), "iso": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "event": event, **payload}
+    row["prev"] = _last_hash(path)
+    row["hash"] = _digest(row)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, default=str) + "\n")
     return row
+
+
+def verify(path: str = DEFAULT_PATH) -> dict:
+    """Walk the hash chain. Returns ok + where it first disagrees."""
+    rows = read(path)
+    prev = GENESIS
+    unchained = 0
+    chained = 0
+    for index, row in enumerate(rows):
+        if not row.get("hash"):
+            unchained += 1
+            prev = GENESIS          # pre-chain records carry no link to inherit
+            continue
+        if row.get("prev") != prev:
+            return {"ok": False, "index": index, "event": row.get("event"),
+                    "reason": "prev does not match the previous record's hash — "
+                              "a record was inserted, removed or reordered",
+                    "records": len(rows), "unchained": unchained}
+        if _digest(row) != row["hash"]:
+            return {"ok": False, "index": index, "event": row.get("event"),
+                    "reason": "content hash mismatch — this record was edited",
+                    "records": len(rows), "unchained": unchained}
+        prev = row["hash"]
+        chained += 1
+    return {"ok": True, "records": len(rows), "chained": chained,
+            "unchained": unchained, "head": prev if chained else None}
 
 
 def read(path: str = DEFAULT_PATH) -> list[dict]:

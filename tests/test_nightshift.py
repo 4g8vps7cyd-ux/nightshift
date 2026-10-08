@@ -6,6 +6,7 @@ No network, no credentials: risk logic is testable in isolation by design.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -544,6 +545,59 @@ class TestUtaApiVersion(unittest.TestCase):
     def test_bad_api_version_is_rejected_loudly(self):
         with self.assertRaises(ValueError):
             Bitget(Credentials("k", "s", "p"), api_version="v3")
+
+
+class TestJournalChain(unittest.TestCase):
+    """The journal must be tamper-evident: real money rides on this record."""
+
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), "journal.jsonl")
+
+    def test_each_record_links_to_the_previous_hash(self):
+        first = journal.record("screen", {"regimes": []}, self.path)
+        second = journal.record("skipped", {"why": "no tradeable signal"}, self.path)
+        self.assertEqual(first["prev"], journal.GENESIS)
+        self.assertEqual(second["prev"], first["hash"])
+        result = journal.verify(self.path)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["chained"], 2)
+        self.assertEqual(result["head"], second["hash"])
+
+    def test_editing_a_record_is_detected(self):
+        journal.record("screen", {"n": 1}, self.path)
+        journal.record("opened", {"plan": {"size": 1}}, self.path)
+        lines = open(self.path, encoding="utf-8").read().splitlines()
+        row = json.loads(lines[0])
+        row["n"] = 999                      # quietly rewrite what was recorded
+        lines[0] = json.dumps(row)
+        open(self.path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+        result = journal.verify(self.path)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["index"], 0)
+        self.assertIn("edited", result["reason"])
+
+    def test_removing_a_record_is_detected(self):
+        for i in range(3):
+            journal.record("screen", {"i": i}, self.path)
+        lines = open(self.path, encoding="utf-8").read().splitlines()
+        open(self.path, "w", encoding="utf-8").write(lines[0] + "\n" + lines[2] + "\n")
+        result = journal.verify(self.path)
+        self.assertFalse(result["ok"])
+        self.assertIn("inserted, removed or reordered", result["reason"])
+
+    def test_pre_chain_records_are_counted_not_blessed(self):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": 1.0, "event": "screen", "n": 1}) + "\n")
+        journal.record("opened", {"plan": {}}, self.path)
+        result = journal.verify(self.path)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["unchained"], 1)
+        self.assertEqual(result["chained"], 1)
+
+    def test_empty_journal_verifies(self):
+        result = journal.verify(self.path)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["records"], 0)
 
 
 if __name__ == "__main__":

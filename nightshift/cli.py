@@ -18,7 +18,7 @@ import sys
 
 from .agent import DEFAULT_UNIVERSE, AgentConfig, NightShiftAgent
 from .exchange import Bitget, BitgetError, Credentials
-from .journal import DEFAULT_PATH, lessons, review
+from .journal import DEFAULT_PATH, lessons, review, verify as verify_journal
 from .risk import RiskRefusal
 from .signals import ENGINES, evaluate_all, rsi
 
@@ -215,6 +215,20 @@ def cmd_review(args) -> int:
     return 0
 
 
+def cmd_audit(args) -> int:
+    """Walk the journal's hash chain: proof the record was not rewritten."""
+    result = verify_journal(_opt(args, "journal"))
+    if result["ok"]:
+        print(f"journal chain OK — {result['records']} records, "
+              f"{result['chained']} chained, {result['unchained']} pre-chain")
+        if result.get("head"):
+            print(f"head {result['head'][:24]}…")
+        return 0
+    print(f"journal chain BROKEN at record #{result['index']} ({result['event']}): "
+          f"{result['reason']}", file=sys.stderr)
+    return 2
+
+
 def _shared_options() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--credentials", default=argparse.SUPPRESS,
@@ -263,7 +277,8 @@ def build_parser() -> argparse.ArgumentParser:
                 ("run", cmd_run, "unattended loop"),
                 ("watch", cmd_watch, "positions vs rails"),
                 ("paper", cmd_paper, "walk-forward paper trading on history"),
-                ("review", cmd_review, "expectancy + lessons")]
+                ("review", cmd_review, "expectancy + lessons"),
+                ("audit", cmd_audit, "verify the journal's hash chain")]
     for name, fn, helptext in commands:
         sp = sub.add_parser(name, parents=[common], help=helptext)
         if name == "plan":

@@ -72,6 +72,15 @@ account (one read-only call), stores the answer, and the same rails run on
 either: v2 `tradeSide` or v3 hedge-mode `posSide` + `presetStopLossPrice`, with
 the same read-back verification after entry.
 
+**9. The journal is tamper-evident.**
+Each record carries the hash of the one before it, so a record edited or removed
+after the fact fails `audit` at the exact index it broke — the same idea as the
+hash-chained verdicts the strongest entries in this hackathon shipped. Pre-chain
+records are reported as `unchained`, never silently blessed.
+
+Everything we got wrong, and how we found it, is in
+[`docs/WRONG.md`](docs/WRONG.md).
+
 ---
 
 ## Quickstart
@@ -90,6 +99,7 @@ python -m nightshift.cli signals --symbols XAUUSDT       # every engine's opinio
 python -m nightshift.cli plan --symbol XAUUSDT --engine rsi
 python -m nightshift.cli once                            # one cycle (dry-run)
 python -m nightshift.cli run --cycles 12 --live           # the 24/7 loop
+python -m nightshift.cli audit                            # verify the journal's hash chain
 python -m nightshift.cli watch                            # positions vs their rails
 python -m nightshift.cli review                           # expectancy + lessons
 python -m nightshift.cli paper --timeframe 15m --pages 6   # walk-forward paper run
