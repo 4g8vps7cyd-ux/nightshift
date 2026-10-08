@@ -26,11 +26,17 @@ github.com/4g8vps7cyd-ux/nightshift
 Measured on Bitget perps: fees/risk = (entry × 2 × fee_rate) / stop_distance.
 Size cancels. A 0.12% stop on a 0.06% taker fee = fees eat 100% of the risk.
 
-Added a stop floor + a fee-refusal rail: same data went from Sharpe −3.19 to +4.17.
+Added a stop floor + a fee-refusal rail: same data went from Sharpe −3.50 to +3.71.
 
 @Bitget_AI
 github.com/4g8vps7cyd-ux/nightshift
 ```
+
+> **Note for the published post:** the live post cites **−3.19 → +4.17**, the
+> figures as they stood before the simulator's rounding bug was found and fixed
+> (see `docs/paper/README.md`). The corrected pair is **−3.50 → +3.71**. Do not
+> silently edit history: if the number is quoted again, quote the corrected one,
+> or say which revision it comes from.
 
 ## Option C — the rail story (247 chars)
 

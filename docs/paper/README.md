@@ -114,9 +114,10 @@ genuinely out-of-sample for that choice.
   trade**, 50x leverage cap, isolated margin model.
 - **Pooled panel:** the aggregate treats the four symbols as four accounts, so
   pooled starting capital is **$4 000** and pooled returns are computed against
-  it. This is why the aggregate Sharpe (+4.17) is lower than ETH's standalone
-  (+3.69 → pooled contribution diluted by XAU's loss) — a smaller number on a
-  bigger, honest denominator.
+  it. Every trade is sized off its own symbol's $1 000, so the pooled Sharpe
+  (+3.71) is not an average of the four symbol Sharpes (ETH +3.35, SOL +2.69,
+  BTC −0.21, XAU −0.30) — it is the portfolio's own number on the honest,
+  larger denominator.
 - **Sharpe:** annualised from **per-trade** returns using the run's own trade
   frequency (trades/day × 365), risk-free rate 0. The `periodsPerYear` field is
   written into every log so the convention travels with the number.
