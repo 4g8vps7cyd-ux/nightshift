@@ -168,7 +168,8 @@ def simulate_symbol(symbol: str, candles: list[list[float]], *, engine: str = "m
                               size_step=size_step, confidence=signal.confidence,
                               min_rr=min_rr, max_margin_pct=max_margin_pct,
                               min_stop_pct=min_stop_pct, fee_rate=fee_rate,
-                              max_fee_ratio=max_fee_ratio)
+                              max_fee_ratio=max_fee_ratio,
+                              price_place=None)   # never round inside a simulation
         except RiskRefusal as refusal:
             result.refusals.append({"time": _iso(entry_bar[0]), "side": signal.action,
                                     "entry": round(entry, 4),

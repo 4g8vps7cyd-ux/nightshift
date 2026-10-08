@@ -85,16 +85,23 @@ both legs, stops checked before targets inside a bar):
 
 | Metric | Value |
 |---|---|
-| Paper window | **2026-09-07 → 2026-10-07, 29.74 days**, 2 976 bars per symbol, 4 symbols |
-| Trades / refusals | **141 trades**, 44 refusals by the risk rails |
-| Sharpe (annualised, run's own trade frequency) | **+4.17** (Sortino +6.14) |
-| Max drawdown | **2.22%** |
-| Win rate / profit factor | **43.97%** / 1.279 |
-| Expectancy | **+1.07 USDT per trade** on 1% risk of a $1 000 account |
-| Fees paid | 97.93 USDT (vs 238.95 USDT for the fee-blind momentum baseline) |
-| Per-symbol Sharpe | XAU −1.07 · BTC +0.43 · ETH +3.69 · SOL +2.85 |
+| Paper window | **2026-09-08 → 2026-10-08, 29.74 days**, 2 976 bars per symbol, 4 symbols |
+| Trades / refusals | **144 trades**, 44 refusals by the risk rails |
+| Sharpe (annualised, run's own trade frequency) | **+3.71** (Sortino +5.29) |
+| Max drawdown | **2.24%** |
+| Win rate / profit factor | **45.14%** / 1.241 |
+| Expectancy | **+0.93 USDT per trade** on 1% risk of a $1 000 account |
+| Fees paid | 99.80 USDT (vs 245.14 USDT for the fee-blind momentum baseline) |
+| Per-symbol Sharpe | ETH +3.35 · SOL +2.69 · BTC −0.21 · XAU −0.30 |
 | Live evidence | one real isolated XAUUSDT position with rails (SL 4120 / TP 4158) attached at entry and read back from the exchange — `docs/DEMO.md` |
-| Unit tests | **39 passing**, no network required |
+| Unit tests | **46 passing**, no network required |
+
+> **Post-submission correction (honesty note).** The form was submitted while the
+> figures stood at Sharpe **+4.17** / 43.97% win / 2.22% DD on 141 trades. A
+> rounding bug in the simulator was found afterwards (see below) and the
+> corrected run is **+3.71** / 45.14% / 2.24% on 144 trades. The deployed default
+> was validated with the corrected code; this file carries the corrected numbers,
+> and every log in `docs/paper/` was regenerated from it.
 
 The negative results are reported too — that is the point of the exercise:
 
@@ -103,10 +110,12 @@ The negative results are reported too — that is the point of the exercise:
   fee_rate) / stop_distance`, so a 0.12% intraday stop on a 0.06% taker fee
   means fees equal the entire risk budget. The fix — a stop-distance floor plus
   a refusal rule for fee-dominated setups — is what moved the same data from
-  Sharpe −3.19 to **+4.17**.
-- **Exactly one of twelve configurations was positive on both the training and
-  the out-of-sample half** (15m mean-reversion with a 1.2% stop floor). The rest
-  are printed in `docs/paper/grid.json` either way.
+  Sharpe −3.50 to **+3.71**.
+- **Once the simulator's own accounting was audited, the survivors got fewer,
+  not more.** A rounding bug (2 decimals) had been manufacturing profitable
+  "stop" exits on cheap coins; after the fix their edge vanished (Sharpe −0.47)
+  and only **6 of 48** swept configurations still held up on both halves of the
+  data. Both the bug and the negative result are in `docs/paper/README.md`.
 - **Dual-leg hedging does not work on a small account.** At 100x an anchored
   losing leg costs `1/leverage = 1%`, while a realistic scalp target is 0.2%:
   one anchor erases five winners. The maths only closes at the 800–2000x that
@@ -144,6 +153,6 @@ rails it cannot move.
 - [ ] X post is **public** and quotes the official post; copy its URL
 - [ ] repo is public: https://github.com/4g8vps7cyd-ux/nightshift
 - [ ] `docs/paper/` logs committed (paper trading log = required material)
-- [ ] `python -m unittest discover -s tests` passes on a clean clone (34 tests)
+- [ ] `python -m unittest discover -s tests` → **46 passing** on a clean clone
 - [ ] no credentials or journals committed (`.gitignore` covers `*.jsonl`)
 - [ ] form submitted **before 8 Oct (UTC+8)** — deadline was extended twice

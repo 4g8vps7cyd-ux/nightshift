@@ -58,8 +58,8 @@ cancels. With a 0.06% taker fee, a 0.12% stop means **fees equal the entire risk
 budget**: every trade must win twice to break even. So `risk.py` enforces a
 floor on stop distance (`--min-stop-pct`, widening the stop and shrinking size to
 keep risk constant) and refuses any setup where fees would still exceed
-`--max-fee-ratio` of the risk. This single rail turned a −3.19 Sharpe drift into
-**+4.17** on the same data — see [`docs/paper/`](docs/paper/README.md).
+`--max-fee-ratio` of the risk. This single rail turned a −3.50 Sharpe drift into
+**+3.71** on the same data — see [`docs/paper/`](docs/paper/README.md).
 
 **7. Dry-run by default.**
 `--live` is required to touch money. Even then, `--max-positions` is enforced.
@@ -164,9 +164,9 @@ checked before targets inside a bar. Full method and caveats:
 
 | Config | Trades | Win rate | Sharpe | Max DD | Expectancy | Fees paid |
 |---|---|---|---|---|---|---|
-| **15m · reversion · stop ≥ 1.2%** | 141 | 43.97% | **+4.17** | **2.22%** | **+1.07 USDT** | 97.93 USDT |
-| 15m · momentum (no stop floor) | 172 | 37.79% | −3.19 | 3.55% | −0.59 USDT | 238.95 USDT |
-| 1H · reversion · stop ≥ 1.2% | 85 | 35.29% | +0.028 | 2.20% | +0.01 USDT | 52.87 USDT |
+| **15m · reversion · stop ≥ 1.2%** | 144 | 45.14% | **+3.71** | **2.24%** | **+0.93 USDT** | 99.80 USDT |
+| 15m · momentum (no stop floor) | 176 | 37.50% | −3.50 | 3.43% | −0.64 USDT | 245.14 USDT |
+| 1H · reversion · stop ≥ 1.2% | 89 | 35.96% | −0.67 | 2.26% | −0.24 USDT | 55.27 USDT |
 
 Two honest notes that matter more than the headline: the edge is concentrated in
 **SOL and ETH** (XAU lost money in the winning configuration), and one of twelve
@@ -177,7 +177,7 @@ of it was measured.
 ### Shipped defaults = the configuration the research validated
 
 A wider 48-cell sweep (2 timeframes × 4 engines × 3 stop floors × 2 ER floors,
-each split train/validation) left five survivors, and the best-evidenced one is
+each split train/validation) left **six** survivors, and the best-evidenced one is
 the default the CLI and agent now ship:
 
 ```

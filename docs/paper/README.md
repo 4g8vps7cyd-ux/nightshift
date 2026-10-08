@@ -35,18 +35,18 @@ during the competition period.
 
 | Config | Trades | Win rate | Sharpe | Sortino | Max DD | Expectancy | Profit factor | Total return | Fees paid |
 |---|---|---|---|---|---|---|---|---|---|
-| **15m · reversion · stop ≥ 1.2%** | 141 | 43.97% | **+4.17** | +6.14 | **2.22%** | **+1.071** USDT | 1.279 | **+3.78%** | 97.93 USDT |
-| 15m · momentum (no stop floor) | 172 | 37.79% | −3.19 | −3.76 | 3.55% | −0.591 USDT | 0.868 | −2.54% | **238.95 USDT** |
-| 1H · reversion · stop ≥ 1.2% | 85 | 35.29% | +0.028 | +0.04 | 2.20% | +0.010 USDT | 1.002 | +0.02% | 52.87 USDT |
+| **15m · reversion · stop ≥ 1.2%** | 144 | 45.14% | **+3.71** | +5.29 | **2.24%** | **+0.933** USDT | 1.241 | **+3.36%** | 99.80 USDT |
+| 15m · momentum (no stop floor) | 176 | 37.50% | −3.50 | −6.57 | 3.43% | −0.640 USDT | 0.857 | −3.89% | **245.14 USDT** |
+| 1H · reversion · stop ≥ 1.2% | 89 | 35.96% | −0.67 | −0.96 | 2.26% | −0.241 USDT | 0.949 | −0.54% | 55.27 USDT |
 
 Per-symbol Sharpe for the winning configuration:
 
 | Symbol | Trades | Sharpe |
 |---|---|---|
-| XAUUSDT | 16 | −1.07 |
-| BTCUSDT | 34 | +0.43 |
-| ETHUSDT | 39 | +3.69 |
-| SOLUSDT | 52 | +2.85 |
+| XAUUSDT | 16 | −0.30 |
+| BTCUSDT | 34 | −0.21 |
+| ETHUSDT | 39 | +3.35 |
+| SOLUSDT | 52 | +2.69 |
 
 ### Equity curves
 
@@ -88,11 +88,11 @@ both are in `risk.py`:
 1. **`min_stop_pct`** — widen a too-tight stop to a floor (the tuned run uses
    1.2%), which also shrinks position size to keep the risk constant.
 2. **`max_fee_ratio`** — refuse the trade outright when fees would still exceed
-   that share of the risk (default 30%). The momentum baseline produced **741
-   such refusals**, and paid **238.95 USDT in fees on 172 trades** — a bill
+   that share of the risk (default 30%). The momentum baseline produced **744
+   such refusals**, and paid **245.14 USDT in fees on 176 trades** — a bill
    larger than the entire pooled paper capital of any single symbol account.
    That is the rail doing its job, and the reason the tuned run's fee bill is
-   97.93 USDT on 141 trades instead.
+   99.80 USDT on 144 trades instead.
 
 ## Train / validation grid
 
@@ -128,30 +128,54 @@ genuinely out-of-sample for that choice.
 
 `search.json` holds a wider sweep: 2 timeframes × 4 engines × 3 stop floors × 2
 efficiency-ratio floors, each run on the first 70% of the bars (train) and the
-last 30% (validation). **5 of 48 cells were positive on both halves.**
+last 30% (validation). **6 of 48 cells were positive on both halves.**
 
 | # | Config | Train (n / Sharpe / exp / maxDD) | Validation (n / Sharpe / exp / maxDD) |
 |---|---|---|---|
-| 1 | **1H exhaustion, stop ≥ 1.2%, ER ≥ 0** | 61 / **+5.23** / +3.07 / 1.54% | 15 / **+4.08** / +1.14 / 0.70% |
-| 2 | 15m exhaustion, no stop floor, ER ≥ 0.1 | 52 / +4.01 / +1.54 / 1.36% | 7 / +3.00 / +1.62 / 0.29% |
-| 3 | **15m reversion, stop ≥ 1.2%, ER ≥ 0.1** | 106 / +2.84 / +0.71 / 2.26% | 35 / **+4.68** / +1.14 / 0.96% |
-| 4 | 15m reversion, stop ≥ 1.2%, ER ≥ 0 | 107 / +1.85 / +0.46 / 2.41% | 35 / +4.68 / +1.14 / 0.96% |
-| 5 | 15m exhaustion, no stop floor, ER ≥ 0 | 55 / +3.10 / +1.20 / 2.05% | 8 / +1.84 / +0.88 / 0.40% |
+| 1 | **1H exhaustion, stop ≥ 1.2%, ER ≥ 0** | 68 / **+4.89** / +2.54 / 1.75% | 13 / **+6.69** / +2.10 / 0.62% |
+| 2 | 15m exhaustion, no stop floor, ER ≥ 0.1 | 51 / +4.21 / +1.65 / 1.36% | 7 / +3.00 / +1.62 / 0.30% |
+| 3 | **15m reversion, stop ≥ 1.2%, ER ≥ 0.1** | **107** / +2.82 / +0.69 / 2.26% | **34** / +5.25 / +1.31 / 0.97% |
+| 4 | 15m exhaustion, no stop floor, ER ≥ 0 | 55 / +3.84 / +1.50 / 1.97% | 8 / +1.84 / +0.88 / 0.40% |
+| 5 | 15m reversion, stop ≥ 1.2%, ER ≥ 0 | 108 / +1.79 / +0.44 / 2.41% | 34 / +5.25 / +1.31 / 0.97% |
+| 6 | 15m exhaustion, stop ≥ 1.2%, ER ≥ 0 | **99** / +0.62 / +0.12 / 2.40% | 27 / **+7.24** / +1.47 / 0.66% |
 
 Three things are worth reading out of that table:
 
-- **The exhaustion engine appears in three of the five survivors**, and a wide
-  stop floor in the two highest-Sharpe cells. That coherence is more informative
+- **The exhaustion engine appears in four of the six survivors**, and a wide
+  stop floor in the highest-Sharpe cells. That coherence is more informative
   than any single cell: it is the same mechanism as the fee finding above —
   fading a spike with a wide stop pays; chasing a trend with a tight stop does
   not.
-- **Cell #3 has the most evidence**: 106 train trades and 35 validation trades,
-  positive on both, with the validation half *better* than the training half
-  (Sharpe +2.84 → +4.68). Small samples elsewhere (7–15 validation trades) mean
-  those Sharpes carry wide error bars.
-- **A 5-in-48 hit rate is partly what multiple testing produces.** At this sample
-  size one or two false positives should be expected; the survivors are the
-  candidates, not the conclusion.
+- **Cell #3 carries the most evidence** (107 train trades, 34 validation,
+  positive on both, and the validation half *better* than training: Sharpe
+  +2.82 → +5.25). Cell #1 has the best worst-half Sharpe but only 13 validation
+  trades — and its 1H holds are exposed to the funding cost this simulator does
+  not model. That is why the shipped default stays on 15m reversion: the most
+  evidence and the least unmodelled cost, not the prettiest Sharpe.
+- **A 6-in-48 hit rate is partly what multiple testing produces.** At this
+  sample size one or two false positives should be expected; the survivors are
+  candidates, not conclusions.
+
+## Bug found and fixed in this simulator
+
+The first version of these logs reported Sharpe **+13 to +17** on cheap coins
+(DOGE, ALGO, HBAR) with a 69–75% win rate and a **positive** average PnL on
+"stop" exits — which is impossible: a stop-loss exit has to lose.
+
+Cause: the simulator left `price_place` at its default of **2 decimal places**.
+At DOGE 0.088 that rounds the stop to 0.09 — *above* the entry — and the target
+to 0.09, *below* it. The exit walk then reported a stop hit at a price better
+than entry, manufacturing winners out of stop-outs. At XAU 4 130 the same
+rounding is 0.0002% of price and harmless, which is why the majors' results
+barely moved.
+
+Fix: `build_plan(..., price_place=None)` inside simulations keeps full
+precision; the venue's tick size is applied only when sending a real order. A
+regression test now asserts that **every stop exit has negative gross PnL and
+every target exit positive**, and the corrected cheap-coin run is negative
+(aggregate Sharpe −0.47), so that "edge" was an artefact and is reported as
+one. The lesson generalises: a backtest that never checks its own exit
+accounting is describing a market that does not exist.
 
 ## What this does *not* prove
 

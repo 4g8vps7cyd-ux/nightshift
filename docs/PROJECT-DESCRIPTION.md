@@ -44,7 +44,7 @@ is refused in code.
 That last rail came out of the data: `fees / risk = (entry × 2 × fee_rate) /
 stop_distance` — position size cancels, so a 0.12% intraday stop on a 0.06% taker
 fee means **fees equal the entire risk budget**. Adding a stop-distance floor
-plus a fee refusal moved the same data from Sharpe −3.19 to **+4.17**.
+plus a fee refusal moved the same data from Sharpe −3.50 to **+3.71**.
 
 **Why existing solutions fall short:** most retail bots are built to *find*
 trades and to look busy; almost none ship a rail that can veto the trade, and
@@ -87,20 +87,20 @@ per trade, $1,000 per symbol ($4,000 pooled).
 
 | Metric | Value | Label |
 |---|---|---|
-| Test period | 2026-09-07 → 2026-10-07, 29.74 days, 4 symbols | **observed** |
-| Trades | 141 (4.7/day), plus 44 setups refused by the risk rails | **observed** |
-| Returns | +3.78% on pooled $4,000 | **observed** |
-| Sharpe / Sortino | +4.17 / +6.14 (per-trade returns, annualised on the run's own trade frequency) | **observed** |
-| Max drawdown | 2.22% | **observed** |
-| Win rate / profit factor | 43.97% / 1.279 | **observed** |
-| Expectancy | +1.07 USDT per trade at 1% risk | **observed** |
-| Turnover | ≈ $82k notional (≈ $579 average position, derived from the fee bill) | **estimated** |
-| Costs — fees | 97.93 USDT paid, 2.4% of pooled capital over 30 days | **observed** |
+| Test period | 2026-09-08 → 2026-10-08, 29.74 days, 4 symbols | **observed** |
+| Trades | 144 (4.8/day), plus 44 setups refused by the risk rails | **observed** |
+| Returns | +3.36% on pooled $4,000 | **observed** |
+| Sharpe / Sortino | +3.71 / +5.29 (per-trade returns, annualised on the run's own trade frequency) | **observed** |
+| Max drawdown | 2.24% | **observed** |
+| Win rate / profit factor | 45.14% / 1.241 | **observed** |
+| Expectancy | +0.93 USDT per trade at 1% risk | **observed** |
+| Turnover | ≈ $83k notional (≈ $580 average position, derived from the fee bill) | **estimated** |
+| Costs — fees | 99.80 USDT paid, 2.5% of pooled capital over 30 days | **observed** |
 | Costs — slippage | not modelled; market entries assumed to fill at the next bar's open | **estimated** |
 | Costs — funding | not modelled; perp funding would reduce the numbers | **estimated** |
 | Live evidence | one real isolated XAUUSDT position with SL 4120 / TP 4158 attached at entry and read back from the exchange, stopped out at 4121.31 for −0.365 USDT — the planned risk | **observed** |
-| Concentration | per-symbol Sharpe: ETH +3.69, SOL +2.85, BTC +0.43, XAU −1.07 | **observed** |
-| Negative control | same engine without the fee rail: Sharpe −3.19 and 238.95 USDT of fees | **observed** |
+| Concentration | per-symbol Sharpe: ETH +3.35, SOL +2.69, BTC −0.21, XAU −0.30 | **observed** |
+| Negative control | same engine without the fee rail: Sharpe −3.50 and 245.14 USDT of fees | **observed** |
 
 **How I will prove the product is effectively used and distributed** (targets —
 this is a pre-launch build):
@@ -155,6 +155,15 @@ simulator; multi-position portfolio caps.
    through the library — flipping the Sharpe sign. Fix: an invariant test on the
    pooled basis, and always re-running the headline through the CLI path a user
    actually types.
+
+6. **A rounding bug that manufactured an edge.** The simulator left price
+   precision at 2 decimals. At XAU 4 130 that is harmless; at DOGE 0.088 it
+   rounded the stop to 0.09 — *above* the entry — so "stop-loss" exits came out
+   profitable and cheap-coin runs printed Sharpe +13 to +17. Fix: full precision
+   inside simulations, the venue's tick size only on real orders, plus a
+   regression test asserting every stop exit loses and every target exit wins.
+   The corrected cheap-coin result is negative (Sharpe −0.47), and it is
+   reported as negative.
 
 **Next:** an LLM engine for event/sentiment reasoning (Qwen credits applied for),
 maker-only entries, funding and slippage in the simulator, and a per-account risk

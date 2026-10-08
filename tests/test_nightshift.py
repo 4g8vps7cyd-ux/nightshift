@@ -358,5 +358,56 @@ class TestShippedDefaults(unittest.TestCase):
         self.assertLess(plan.margin_usd, 400.0)
 
 
+class TestSimulatorInvariants(unittest.TestCase):
+    """Invariants that would have caught the low-price rounding bug on day one."""
+
+    def test_no_rounding_when_price_place_is_none(self):
+        plan = build_plan("DOGEUSDT", "long", 0.0885, 0.08745, 0.0915, equity=1000.0,
+                          leverage=50, risk_pct=1.0, price_place=None)
+        self.assertLess(plan.stop, plan.entry)
+        self.assertGreater(plan.target, plan.entry)
+        self.assertNotEqual(plan.entry, plan.stop)
+
+    def test_two_decimal_rounding_collapses_a_cheap_symbol(self):
+        # Documents the bug that produced fake Sharpe 13-17 on DOGE/ALGO: at a
+        # 0.088 price, rounding to 2 dp puts the "stop" ABOVE the entry.
+        plan = build_plan("DOGEUSDT", "long", 0.0885, 0.08745, 0.0915, equity=1000.0,
+                          leverage=50, risk_pct=1.0, price_place=2)
+        self.assertEqual(plan.stop, 0.09)
+        self.assertGreaterEqual(plan.stop, plan.entry)
+
+    def test_stop_exits_always_lose_and_target_exits_always_win(self):
+        series = flat_bars(120, 100.0, 0.5)
+        series.append(bar(120, 100.0, 105.2, 99.9, 105.0))
+        series.append(bar(121, 105.4, 105.5, 104.8, 105.4))
+        series.append(bar(122, 105.0, 110.0, 90.0, 100.0))     # contains both levels
+        series += [bar(123 + i, 105.0, 105.1, 104.9, 105.0) for i in range(6)]
+        result = paper.simulate_symbol("TESTUSDT", series, engine="momentum", size_step=0.001)
+        self.assertTrue(result.trades)
+        for t in result.trades:
+            direction = 1.0 if t.hold_side == "long" else -1.0
+            gross = (t.exit - t.entry) * t.size * direction
+            if t.exit_reason == "stop":
+                self.assertLess(gross, 0.0,
+                                f"stop exit at {t.exit} vs entry {t.entry} must be a loss")
+            elif t.exit_reason == "target":
+                self.assertGreater(gross, 0.0, "target exit must be a win")
+
+    def test_cheap_symbol_geometry_survives_a_real_simulation(self):
+        # A 0.088-priced symbol with realistic volatility must keep stop < entry.
+        series = flat_bars(120, 0.088, 0.0004)
+        series.append(bar(120, 0.088, 0.0884, 0.0876, 0.0883))
+        series.append(bar(121, 0.0883, 0.0885, 0.0880, 0.0884))
+        series += [bar(122 + i, 0.0884, 0.0887, 0.0881, 0.0885) for i in range(8)]
+        result = paper.simulate_symbol("DOGEUSDT", series, engine="momentum",
+                                       start_equity=1000.0, min_stop_pct=1.2,
+                                       size_step=0.001, min_size=0.001)
+        for t in result.trades:
+            if t.hold_side == "long":
+                self.assertLess(t.stop, t.entry)
+            else:
+                self.assertGreater(t.stop, t.entry)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

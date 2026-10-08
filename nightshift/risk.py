@@ -88,10 +88,10 @@ def liquidation_price(entry: float, leverage: int, hold_side: str,
 
 def build_plan(symbol: str, action: str, entry: float, stop: float, target: float,
                equity: float, *, leverage: int = 50, risk_pct: float = 1.0,
-               min_size: float = 0.0, size_step: float = 0.0, price_place: int = 2,
+               min_size: float = 0.0, size_step: float = 0.0,
                confidence: float = 1.0, max_margin_pct: float = 40.0,
                min_rr: float = 1.5, min_stop_pct: float = 0.0, fee_rate: float = 0.0006,
-               max_fee_ratio: float = 0.30) -> Plan:
+               max_fee_ratio: float = 0.30, price_place: int | None = 2) -> Plan:
     """Turn a directional idea into an executable, rail-checked order plan.
 
     Two rails here are unusual and worth stating plainly, because they are the
@@ -166,11 +166,17 @@ def build_plan(symbol: str, action: str, entry: float, stop: float, target: floa
     if rr < min_rr:
         raise RiskRefusal(f"reward:risk {rr:.2f} < required {min_rr}")
 
+    # price_place=None keeps full precision. Rounding a stop/target to a fixed
+    # number of decimals is only safe when the price is large: for DOGE at 0.088,
+    # rounding to 2 dp collapses the stop and target onto the entry (and can even
+    # flip them), which silently turns stop-loss exits into "winners".
+    def place(value: float) -> float:
+        return value if price_place is None else round(value, price_place)
+
     return Plan(symbol=symbol, side=side, hold_side=hold_side, size=size,
-                entry=round(entry, price_place), stop=round(stop, price_place),
-                target=round(target, price_place), leverage=leverage,
-                margin_usd=margin, risk_usd=risk_usd, reward_usd=reward_usd, rr=rr,
-                notes=notes)
+                entry=place(entry), stop=place(stop), target=place(target),
+                leverage=leverage, margin_usd=margin, risk_usd=risk_usd,
+                reward_usd=reward_usd, rr=rr, notes=notes)
 
 
 def protective_rails(entry: float, stop: float, target: float, atr_value: float,
