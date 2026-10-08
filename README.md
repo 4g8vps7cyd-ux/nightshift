@@ -64,6 +64,14 @@ keep risk constant) and refuses any setup where fees would still exceed
 **7. Dry-run by default.**
 `--live` is required to touch money. Even then, `--max-positions` is enforced.
 
+**8. Speaks both of Bitget's account generations.**
+Bitget serves Classic (`/api/v2/mix/*`) and Unified (`/api/v3/*`) accounts, and
+each family rejects the other's endpoints, so a client that knows only one
+stops working the day the account is upgraded. `--api-version auto` probes the
+account (one read-only call), stores the answer, and the same rails run on
+either: v2 `tradeSide` or v3 hedge-mode `posSide` + `presetStopLossPrice`, with
+the same read-back verification after entry.
+
 ---
 
 ## Quickstart

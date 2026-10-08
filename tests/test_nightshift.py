@@ -14,6 +14,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nightshift import journal, metrics, paper, regime, signals
+from nightshift.exchange import Bitget, BitgetError, Credentials
 from nightshift.risk import (RiskRefusal, build_plan, liquidation_price,
                              position_size, protective_rails)
 
@@ -407,6 +408,142 @@ class TestSimulatorInvariants(unittest.TestCase):
                 self.assertLess(t.stop, t.entry)
             else:
                 self.assertGreater(t.stop, t.entry)
+
+
+class TestUtaApiVersion(unittest.TestCase):
+    """The UTA (v3) branch: same rails, different account generation."""
+
+    def _client(self, version="uta", response=None):
+        client = Bitget(Credentials("k", "s", "p"), api_version=version)
+        seen = []
+        payload = {} if response is None else response
+
+        def fake(method, path, query=None, body=None, signed=True):
+            seen.append({"method": method, "path": path, "query": query, "body": body})
+            return payload
+
+        client._call = fake
+        return client, seen
+
+    def test_uta_place_order_is_v3_with_hedge_pos_side(self):
+        client, seen = self._client()
+        client.place_order("SOLUSDT", "buy", 0.1, stop_loss=113.0, take_profit=120.0)
+        call = seen[-1]
+        self.assertEqual(call["path"], "/api/v3/trade/place-order")
+        body = call["body"]
+        self.assertEqual(body["posSide"], "long")
+        self.assertEqual(body["qty"], "0.1")
+        self.assertEqual(body["category"], "USDT-FUTURES")
+        self.assertEqual(body["presetStopLossPrice"], "113")
+        self.assertEqual(body["presetStopSurplusPrice"], "120")
+        self.assertEqual(body["slTriggerBy"], "mark")
+        self.assertNotIn("productType", body)      # v3 uses `category`
+        self.assertNotIn("tradeSide", body)        # v3 uses `posSide`
+
+    def test_uta_short_and_close_side_mapping(self):
+        client, seen = self._client()
+        client.place_order("SOLUSDT", "sell", 0.1)                       # open short
+        self.assertEqual(seen[-1]["body"]["posSide"], "short")
+        client.place_order("SOLUSDT", "sell", 0.1, trade_side="close")   # close long
+        self.assertEqual(seen[-1]["body"]["posSide"], "long")
+        self.assertEqual(seen[-1]["body"]["reduceOnly"], "YES")
+        client.place_order("SOLUSDT", "buy", 0.1, trade_side="close")    # close short
+        self.assertEqual(seen[-1]["body"]["posSide"], "short")
+
+    def test_classic_place_order_is_unchanged(self):
+        client, seen = self._client(version="classic")
+        client.place_order("XAUUSDT", "buy", 0.01, stop_loss=4000.0)
+        call = seen[-1]
+        self.assertEqual(call["path"], "/api/v2/mix/order/place-order")
+        self.assertEqual(call["body"]["tradeSide"], "open")
+        self.assertEqual(call["body"]["size"], "0.01")
+        self.assertIn("productType", call["body"])
+
+    def test_uta_set_leverage_sends_both_sides(self):
+        client, seen = self._client()
+        client.set_leverage("XAUUSDT", 100, "long")
+        body = seen[-1]["body"]
+        self.assertEqual(seen[-1]["path"], "/api/v3/account/set-leverage")
+        self.assertEqual(body["longLeverage"], "100")
+        self.assertEqual(body["shortLeverage"], "100")
+        self.assertEqual(body["marginMode"], "isolated")
+        self.assertNotIn("posSide", body)          # 25200 otherwise
+
+    def test_uta_positions_tolerates_null_list(self):
+        client, _ = self._client(response={"list": None})
+        self.assertEqual(client.positions(), [])
+
+    def test_uta_positions_keeps_only_open_rows(self):
+        client, _ = self._client(response={"list": [
+            {"symbol": "SOLUSDT", "total": "0.1", "holdSide": "long"},
+            {"symbol": "SOLUSDT", "total": "0", "holdSide": "short"},
+        ]})
+        rows = client.positions("SOLUSDT")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["holdSide"], "long")
+
+    def test_uta_plan_orders_keeps_only_rows_with_a_plan_type(self):
+        client, _ = self._client(response={"list": [
+            {"symbol": "X", "planType": "normal_plan", "triggerPrice": "1"},
+            {"symbol": "X", "planType": "loss_plan", "triggerPrice": "2"},
+            {"symbol": "X"},
+        ]})
+        rows = client.plan_orders()
+        self.assertEqual([r["planType"] for r in rows], ["normal_plan", "loss_plan"])
+
+    def test_rails_of_ignores_a_plain_order(self):
+        # A limit order is not a stop: counting it would certify a naked position.
+        client, _ = self._client(response={"list": [
+            {"symbol": "SOLUSDT", "planType": "normal_plan", "triggerPrice": "100"},
+        ]})
+        self.assertEqual(client.rails_of("SOLUSDT"), {})
+
+    def test_rails_of_reads_both_plans(self):
+        client, _ = self._client(response={"list": [
+            {"symbol": "SOLUSDT", "planType": "loss_plan", "triggerPrice": "113.5"},
+            {"symbol": "SOLUSDT", "planType": "profit_plan", "triggerPrice": "121.0"},
+            {"symbol": "BTCUSDT", "planType": "loss_plan", "triggerPrice": "1"},
+        ]})
+        self.assertEqual(client.rails_of("SOLUSDT"),
+                         {"stop_loss": 113.5, "take_profit": 121.0})
+
+    def test_uta_close_position_needs_a_live_position(self):
+        client, _ = self._client(response={"list": None})
+        with self.assertRaises(BitgetError):
+            client.close_position("SOLUSDT", "long")
+
+    def test_uta_close_position_sends_the_live_size(self):
+        client = Bitget(Credentials("k", "s", "p"), api_version="uta")
+        seen = []
+
+        def fake(method, path, query=None, body=None, signed=True):
+            seen.append({"path": path, "body": body})
+            if "/position/current-position" in path:
+                return {"list": [{"symbol": "SOLUSDT", "total": "0.1", "holdSide": "long"}]}
+            return {}
+
+        client._call = fake
+        client.close_position("SOLUSDT", "long")
+        self.assertEqual(seen[-1]["path"], "/api/v3/trade/place-order")
+        self.assertEqual(seen[-1]["body"]["qty"], "0.1")
+        self.assertEqual(seen[-1]["body"]["side"], "sell")
+        self.assertEqual(seen[-1]["body"]["reduceOnly"], "YES")
+
+    def test_detect_api_version_reads_the_account_generation(self):
+        client, _ = self._client()
+        self.assertEqual(client.detect_api_version(), "uta")
+
+        classic = Bitget(Credentials("k", "s", "p"), api_version="uta")
+
+        def raise_40084(method, path, query=None, body=None, signed=True):
+            raise BitgetError("40084", "Classic account mode")
+
+        classic._call = raise_40084
+        self.assertEqual(classic.detect_api_version(), "classic")
+
+    def test_bad_api_version_is_rejected_loudly(self):
+        with self.assertRaises(ValueError):
+            Bitget(Credentials("k", "s", "p"), api_version="v3")
 
 
 if __name__ == "__main__":

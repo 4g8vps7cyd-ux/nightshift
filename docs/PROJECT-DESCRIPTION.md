@@ -165,6 +165,15 @@ simulator; multi-position portfolio caps.
    The corrected cheap-coin result is negative (Sharpe −0.47), and it is
    reported as negative.
 
+7. **The live client spoke only the Classic dialect.** Bitget serves two account
+   generations and each rejects the other's endpoints, so the same key that had
+   opened a real XAU position answered `40085` after the account was upgraded to
+   a Unified Trading Account. Fix: both API families in one client (`--api-version
+   auto` probes and stores which one the account answers), v3 order placement with
+   hedge-mode `posSide` and the protective rails attached, and a rail read-back
+   that no longer mistakes an ordinary limit order for a take-profit. Verified
+   against the live account: mode detection, equity, position and plan reads.
+
 **Next:** an LLM engine for event/sentiment reasoning (Qwen credits applied for),
 maker-only entries, funding and slippage in the simulator, and a per-account risk
 dashboard.

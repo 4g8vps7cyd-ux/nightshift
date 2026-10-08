@@ -27,6 +27,7 @@ DEFAULTS = {
     "leverage": 50, "risk": 1.0, "max_positions": 1, "er_floor": 0.10,
     "min_stop_pct": 1.2, "max_fee_ratio": 0.30,
     "interval": 300, "journal": DEFAULT_PATH, "timeout": 20, "live": False,
+    "api_version": "auto",
 }
 
 
@@ -60,7 +61,19 @@ def _client(args) -> Bitget:
         creds = Credentials.from_file(_opt(args, "credentials"))
     elif os.environ.get("BITGET_API_KEY"):
         creds = Credentials.from_env()
-    return Bitget(creds, timeout=_opt(args, "timeout"))
+    client = Bitget(creds, timeout=_opt(args, "timeout"))
+    version = _opt(args, "api_version")
+    if version == "auto":
+        if creds is None:
+            version = "classic"          # nothing to probe without credentials
+        else:
+            version = client.detect_api_version()
+            print(f"account mode: {version}" + (" (Unified trading account)"
+                                                if version == "uta" else " (Classic)"),
+                  file=sys.stderr)
+    else:
+        client.api_version = version
+    return client
 
 
 def _agent(args) -> NightShiftAgent:
@@ -225,6 +238,9 @@ def _shared_options() -> argparse.ArgumentParser:
     common.add_argument("--timeout", type=int, default=argparse.SUPPRESS)
     common.add_argument("--live", action="store_true", default=argparse.SUPPRESS,
                         help="actually send orders (default: dry-run)")
+    common.add_argument("--api-version", choices=["auto", "classic", "uta"],
+                        default=argparse.SUPPRESS,
+                        help="Bitget account generation: auto probes it (default)")
     return common
 
 

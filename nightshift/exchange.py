@@ -5,10 +5,14 @@ Why hand-rolled: the hackathon agent must run on a bare VPS with no SDK, no
 
 Covers both account generations Bitget currently serves:
 
-* **Classic**  -> ``/api/v2/mix/*``   (works today, proven with real orders)
+* **Classic**  -> ``/api/v2/mix/*``   (works on a Classic account)
 * **UTA**      -> ``/api/v3/*``       (Unified Trading Account, Agent Hub)
 
-The caller picks with ``api_version``; nothing else changes.
+The caller picks with ``api_version`` (``"classic"`` / ``"uta"``), or passes
+``"auto"`` and the first read-only probe decides. The two families are mutually
+exclusive and each rejects the other's endpoints, so guessing is not an option:
+a Classic endpoint on a UTA account answers ``40085``, and a UTA endpoint on a
+Classic account answers ``40084``.
 """
 
 from __future__ import annotations
@@ -76,11 +80,36 @@ class Bitget:
     """Signed REST client. One instance per process is enough."""
 
     def __init__(self, creds: Credentials | None = None, product_type: str = "USDT-FUTURES",
-                 margin_coin: str = "USDT", timeout: int = 20) -> None:
+                 margin_coin: str = "USDT", timeout: int = 20, api_version: str = "classic") -> None:
+        if api_version not in ("classic", "uta"):
+            raise ValueError(f"api_version must be 'classic' or 'uta', got {api_version!r}")
         self.creds = creds
         self.product_type = product_type
         self.margin_coin = margin_coin
         self.timeout = timeout
+        self.api_version = api_version
+
+    @property
+    def uta(self) -> bool:
+        return self.api_version == "uta"
+
+    def detect_api_version(self) -> str:
+        """Probe which API family the account answers, then store it.
+
+        Read-only, one call. The account generation can change between sessions
+        (a voucher expiring is enough to let Bitget upgrade the account), so this
+        is re-probed instead of cached: assuming "it was classic yesterday" is
+        the fastest way to waste an hour debugging the wrong layer.
+        """
+        try:
+            self._call("GET", "/api/v3/account/settings", {"productType": self.product_type})
+            self.api_version = "uta"
+        except BitgetError as exc:
+            if exc.code == "40084":
+                self.api_version = "classic"
+            else:
+                raise
+        return self.api_version
 
     # ------------------------------------------------------------------ http
     def _call(self, method: str, path: str, query: dict | None = None,
@@ -186,6 +215,9 @@ class Bitget:
 
     # ---------------------------------------------------------------- account
     def account(self) -> dict:
+        if self.uta:
+            data = self._call("GET", "/api/v3/account/assets", {"productType": self.product_type})
+            return data if isinstance(data, dict) else (data or [{}])[0]
         data = self._call("GET", "/api/v2/mix/account/accounts", {"productType": self.product_type})
         return data[0] if isinstance(data, list) else data
 
@@ -193,6 +225,13 @@ class Bitget:
         return float(self.account().get("accountEquity") or 0)
 
     def positions(self, symbol: str | None = None) -> list[dict]:
+        if self.uta:
+            query = {"category": self.product_type}
+            if symbol:
+                query["symbol"] = symbol
+            data = self._call("GET", "/api/v3/position/current-position", query)
+            rows = (data or {}).get("list") if isinstance(data, dict) else data
+            return [p for p in (rows or []) if abs(float(p.get("total") or 0)) > 0]
         query = {"productType": self.product_type, "marginCoin": self.margin_coin}
         if symbol:
             query["symbol"] = symbol
@@ -200,12 +239,23 @@ class Bitget:
         return [p for p in (data or []) if abs(float(p.get("total") or 0)) > 0]
 
     def set_leverage(self, symbol: str, leverage: int, hold_side: str) -> Any:
+        if self.uta:
+            # Hedge mode rejects ``leverage`` + ``posSide`` with 25200; both sides
+            # must be set together in one call.
+            return self._call("POST", "/api/v3/account/set-leverage", body={
+                "category": self.product_type, "symbol": symbol,
+                "marginMode": "isolated", "longLeverage": str(leverage),
+                "shortLeverage": str(leverage),
+            })
         return self._call("POST", "/api/v2/mix/account/set-leverage", body={
             "symbol": symbol, "productType": self.product_type, "marginCoin": self.margin_coin,
             "leverage": str(leverage), "holdSide": hold_side,
         })
 
     # ----------------------------------------------------------------- orders
+    _POS_SIDE = {"open": {"buy": "long", "sell": "short"},
+                 "close": {"buy": "short", "sell": "long"}}
+
     def place_order(self, symbol: str, side: str, size: float, *, trade_side: str = "open",
                     order_type: str = "market", price: float | None = None,
                     stop_loss: float | None = None, take_profit: float | None = None,
@@ -216,7 +266,29 @@ class Bitget:
         and the stop a moment later leaves a real, unbounded window in which the
         position is naked — exactly the window in which markets tend to move.
         """
-        body: dict[str, Any] = {
+        if self.uta:
+            body: dict[str, Any] = {
+                "category": self.product_type, "symbol": symbol, "qty": _num(size),
+                "side": side, "orderType": order_type, "marginMode": margin_mode,
+                # hedge mode needs the position side spelled out; v3 has no
+                # `productType` and no `tradeSide`
+                "posSide": self._POS_SIDE[trade_side][side],
+            }
+            if trade_side == "close":
+                body["reduceOnly"] = "YES"
+            if price is not None:
+                body["price"] = _num(price)
+            if stop_loss is not None:
+                body["presetStopLossPrice"] = _num(stop_loss)
+                body["slTriggerBy"] = "mark"
+            if take_profit is not None:
+                body["presetStopSurplusPrice"] = _num(take_profit)
+                body["tpTriggerBy"] = "mark"
+            if client_oid:
+                body["clientOid"] = client_oid
+            return self._call("POST", "/api/v3/trade/place-order", body=body)
+
+        body = {
             "symbol": symbol, "productType": self.product_type, "marginCoin": self.margin_coin,
             "marginMode": margin_mode, "side": side, "tradeSide": trade_side,
             "orderType": order_type, "size": _num(size),
@@ -232,11 +304,35 @@ class Bitget:
         return self._call("POST", "/api/v2/mix/order/place-order", body=body)
 
     def close_position(self, symbol: str, hold_side: str) -> dict:
+        if self.uta:
+            # v3 has no "close everything" endpoint: a reduce-only market order
+            # needs an explicit size, so read the live position first and refuse
+            # rather than send a zero-quantity close into the void.
+            size = 0.0
+            for p in self.positions(symbol):
+                side = str(p.get("holdSide") or p.get("posSide") or "").lower()
+                if side == hold_side:
+                    size = abs(float(p.get("total") or 0))
+            if size <= 0:
+                raise BitgetError("no-position", f"no {hold_side} position in {symbol} to close")
+            return self.place_order(symbol, "sell" if hold_side == "long" else "buy", size,
+                                    trade_side="close")
         return self._call("POST", "/api/v2/mix/order/close-positions", body={
             "symbol": symbol, "productType": self.product_type, "holdSide": hold_side,
         })
 
     def plan_orders(self, plan_type: str = "profit_loss") -> list[dict]:
+        """Orders carrying a ``planType``: protection plans *and* trigger orders.
+
+        On UTA those live in the open-orders list next to ordinary limit orders,
+        so the caller must not assume every row is a stop — ``rails_of`` is the
+        one that decides which rows protect the position.
+        """
+        if self.uta:
+            data = self._call("GET", "/api/v3/trade/unfilled-orders",
+                              {"category": self.product_type})
+            rows = (data or {}).get("list") if isinstance(data, dict) else data
+            return [o for o in (rows or []) if o.get("planType")]
         data = self._call("GET", "/api/v2/mix/order/orders-plan-pending",
                           {"productType": self.product_type, "planType": plan_type})
         if isinstance(data, dict):
@@ -244,6 +340,13 @@ class Bitget:
         return data or []
 
     def order_history(self, symbol: str | None = None, limit: int = 50) -> list[dict]:
+        if self.uta:
+            query = {"category": self.product_type, "limit": str(limit)}
+            if symbol:
+                query["symbol"] = symbol
+            data = self._call("GET", "/api/v3/trade/history-orders", query)
+            rows = (data or {}).get("list") if isinstance(data, dict) else data
+            return rows or []
         query = {"productType": self.product_type, "limit": str(limit)}
         if symbol:
             query["symbol"] = symbol
@@ -253,14 +356,26 @@ class Bitget:
         return data or []
 
     def rails_of(self, symbol: str) -> dict[str, float]:
-        """Read back the protective orders actually living on the exchange."""
+        """Read back the protective orders actually living on the exchange.
+
+        Only rows whose ``planType`` names a plan are considered: a plain limit
+        order carries no ``loss*``/``profit*`` plan type, and treating one as a
+        take-profit would mark a naked position as protected. Unknown plan types
+        are skipped rather than assumed.
+        """
         out: dict[str, float] = {}
         for plan in self.plan_orders("profit_loss"):
             if plan.get("symbol") != symbol:
                 continue
-            kind = "stop_loss" if str(plan.get("planType", "")).startswith("loss") else "take_profit"
+            kind_raw = str(plan.get("planType", "")).lower()
+            if kind_raw.startswith("loss"):
+                kind = "stop_loss"
+            elif kind_raw.startswith("profit"):
+                kind = "take_profit"
+            else:
+                continue
             try:
-                out[kind] = float(plan["triggerPrice"])
+                out[kind] = float(plan.get("triggerPrice"))
             except (KeyError, TypeError, ValueError):
                 continue
         return out
