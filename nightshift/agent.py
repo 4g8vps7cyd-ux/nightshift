@@ -185,12 +185,43 @@ class NightShiftAgent:
                 result = self.cycle()
                 print(f"[cycle {done}] {result.get('action')} :: {result.get('why', result.get('plan', ''))}")
             except BitgetError as exc:
+                if self._readapt_mode(exc):
+                    # Retry immediately with the other API family instead of
+                    # burning the next tick on the same error.
+                    print(f"[cycle {done}] mode akun berubah → {self.client.api_version}; ulangi siklus")
+                    continue
                 journal.record("error", {"error": str(exc)}, self.cfg.journal_path)
                 print(f"[cycle {done}] exchange error: {exc}")
             done += 1
             if cycles is not None and done >= cycles:
                 break
             time.sleep(self.cfg.interval_seconds)
+
+    _MODE_ERRORS = ("40084", "40085")
+
+    def _readapt_mode(self, exc: BitgetError) -> bool:
+        """Re-probe the account generation after a mode-mismatch error.
+
+        Bitget can move an account between Classic and Unified without asking,
+        and each family rejects the other's endpoints. Without this the loop
+        would log the same error on every tick until a human restarted it —
+        which is exactly what happened the first time the account was switched
+        mid-session. Returns True only when the detected family actually changed,
+        so a persistent failure still surfaces as an error rather than looping.
+        """
+        if exc.code not in self._MODE_ERRORS or getattr(self.client, "creds", None) is None:
+            return False
+        before = getattr(self.client, "api_version", "classic")
+        try:
+            now = self.client.detect_api_version()
+        except BitgetError:
+            return False
+        if now == before:
+            return False
+        journal.record("mode_changed", {"from": before, "to": now}, self.cfg.journal_path)
+        notify.send(f"🔁 Mode akun Bitget berubah: {before} → {now}. "
+                    f"Loop lanjut pakai API {now}.")
+        return True
 
 
 def summarize(scans: list[dict[str, Any]]) -> list[dict[str, Any]]:

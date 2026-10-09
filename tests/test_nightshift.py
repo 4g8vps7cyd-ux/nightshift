@@ -15,6 +15,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nightshift import journal, metrics, paper, regime, signals
+from nightshift.agent import AgentConfig, NightShiftAgent
 from nightshift.exchange import Bitget, BitgetError, Credentials
 from nightshift.risk import (RiskRefusal, build_plan, liquidation_price,
                              position_size, protective_rails)
@@ -598,6 +599,60 @@ class TestJournalChain(unittest.TestCase):
         result = journal.verify(self.path)
         self.assertTrue(result["ok"])
         self.assertEqual(result["records"], 0)
+
+
+class TestModeReadapt(unittest.TestCase):
+    """A mid-session account-generation flip must not stall the loop."""
+
+    class _Client:
+        def __init__(self, version="uta", new=None, raises=None):
+            self.api_version = version
+            self.creds = object()
+            self._new = new
+            self._raises = raises
+
+        def detect_api_version(self):
+            if self._raises:
+                raise BitgetError(self._raises, "probe failed")
+            if self._new:
+                self.api_version = self._new
+            return self.api_version
+
+    def _agent(self, client, journal_path):
+        cfg = AgentConfig(journal_path=journal_path)
+        return NightShiftAgent(client, cfg)
+
+    def test_mode_error_triggers_readapt_and_journal(self):
+        path = os.path.join(tempfile.mkdtemp(), "j.jsonl")
+        client = self._Client(version="uta", new="classic")
+        agent = self._agent(client, path)
+        changed = agent._readapt_mode(BitgetError("40084", "Classic mode"))
+        self.assertTrue(changed)
+        self.assertEqual(client.api_version, "classic")
+        events = [r["event"] for r in journal.read(path)]
+        self.assertIn("mode_changed", events)
+        row = [r for r in journal.read(path) if r["event"] == "mode_changed"][0]
+        self.assertEqual((row["from"], row["to"]), ("uta", "classic"))
+
+    def test_non_mode_error_does_not_reprobe(self):
+        path = os.path.join(tempfile.mkdtemp(), "j.jsonl")
+        client = self._Client(version="uta", new="classic")
+        agent = self._agent(client, path)
+        self.assertFalse(agent._readapt_mode(BitgetError("40099", "bad param")))
+        self.assertEqual(client.api_version, "uta")     # untouched
+
+    def test_probe_returning_same_mode_is_not_a_change(self):
+        path = os.path.join(tempfile.mkdtemp(), "j.jsonl")
+        client = self._Client(version="uta", new=None)
+        agent = self._agent(client, path)
+        self.assertFalse(agent._readapt_mode(BitgetError("40085", "UTA mode")))
+        self.assertEqual(journal.read(path), [])
+
+    def test_probe_failure_is_swallowed(self):
+        path = os.path.join(tempfile.mkdtemp(), "j.jsonl")
+        client = self._Client(version="uta", raises="40099")
+        agent = self._agent(client, path)
+        self.assertFalse(agent._readapt_mode(BitgetError("40084", "Classic mode")))
 
 
 if __name__ == "__main__":
