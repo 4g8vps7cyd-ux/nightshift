@@ -323,10 +323,17 @@ class Bitget:
                 if price is not None:
                     body["price"] = _num(price)
                 if stop_loss is not None:
-                    body["presetStopLossPrice"] = _num(stop_loss)
+                    # v3 names these `stopLoss`/`takeProfit`. The `presetStop*`
+                    # spellings belong to v2: sent here they are rejected with
+                    # "Parameter takeProfit cannot be empty" — and a silently
+                    # ignored rail is worse than a loud one, because the client
+                    # would believe a naked position was protected. `rails_of`
+                    # reads the rails back from the exchange for exactly this
+                    # reason; the tests pin the field names.
+                    body["stopLoss"] = _num(stop_loss)
                     body["slTriggerBy"] = "mark"
                 if take_profit is not None:
-                    body["presetStopSurplusPrice"] = _num(take_profit)
+                    body["takeProfit"] = _num(take_profit)
                     body["tpTriggerBy"] = "mark"
                 if client_oid:
                     body["clientOid"] = client_oid

@@ -438,11 +438,25 @@ class TestUtaApiVersion(unittest.TestCase):
         self.assertEqual(body["posSide"], "long")
         self.assertEqual(body["qty"], "0.1")
         self.assertEqual(body["category"], "USDT-FUTURES")
-        self.assertEqual(body["presetStopLossPrice"], "113")
-        self.assertEqual(body["presetStopSurplusPrice"], "120")
+        self.assertEqual(body["stopLoss"], "113")
+        self.assertEqual(body["takeProfit"], "120")
         self.assertEqual(body["slTriggerBy"], "mark")
         self.assertNotIn("productType", body)      # v3 uses `category`
         self.assertNotIn("tradeSide", body)        # v3 uses `posSide`
+
+    def test_uta_never_sends_the_v2_preset_names(self):
+        """`presetStopLossPrice`/`presetStopSurplusPrice` are v2 spellings.
+
+        Sending them to v3 is answered with "Parameter takeProfit cannot be empty"
+        — verified against the live API. A rail that the exchange ignores while the
+        client believes it is attached is the worst possible outcome, so the names
+        are pinned here.
+        """
+        client, seen = self._client()
+        client.place_order("SOLUSDT", "buy", 0.1, stop_loss=113.0, take_profit=120.0)
+        body = seen[-1]["body"]
+        self.assertNotIn("presetStopLossPrice", body)
+        self.assertNotIn("presetStopSurplusPrice", body)
 
     def test_uta_short_and_close_side_mapping(self):
         client, seen = self._client()
@@ -481,7 +495,7 @@ class TestUtaApiVersion(unittest.TestCase):
         body = seen[-1]["body"]
         self.assertNotIn("posSide", body)
         self.assertEqual(body["side"], "buy")
-        self.assertEqual(body["presetStopLossPrice"], "113")
+        self.assertEqual(body["stopLoss"], "113")
         self.assertEqual(seen[-1]["path"], "/api/v3/trade/place-order")
 
     def test_one_way_close_still_reduces_only(self):
