@@ -127,6 +127,30 @@ round the risk up and call it strategy.
 
 ---
 
+## 11. A healthy-looking loop that could not place a single order
+
+The live loop ran, mined signals, printed screens and skipped correctly — and would
+have failed on **every** signal, because the client always spelled out a hedge
+position side (`posSide`) while the account had been switched to **one-way**. Bitget
+answers that mismatch with `25200 SINGLE_SIDE_HOLD`; the cycle ends as "exchange
+error" while, from the outside, everything looks healthy: process alive, fresh log
+lines every five minutes, watchdog quiet.
+
+The failure mode is worth naming: **an order that is never accepted cannot lose
+money, so nothing complains** — not the journal, not the equity curve, not the
+position monitor. The only thing that catches it is reading the exchange's own
+setting:
+
+```
+GET /api/v3/account/settings  ->  {"holdMode": "one_way_mode", ...}
+```
+
+The client now reads the hold mode instead of assuming it, builds the body
+accordingly (no `posSide` on one-way; a single `leverage` rather than the
+long/short pair), and — because this can be flipped in the app at any moment —
+treats a `25200` rejection as *stale information*: refresh the mode, rebuild the
+body, retry once. Six tests cover both shapes and that retry.
+
 ## How to check any of this yourself
 
 ```bash

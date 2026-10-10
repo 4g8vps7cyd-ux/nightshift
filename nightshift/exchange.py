@@ -88,6 +88,7 @@ class Bitget:
         self.margin_coin = margin_coin
         self.timeout = timeout
         self.api_version = api_version
+        self._hold_mode: str | None = None      # 'hedge_mode' | 'one_way_mode' (UTA)
 
     @property
     def uta(self) -> bool:
@@ -110,6 +111,43 @@ class Bitget:
             else:
                 raise
         return self.api_version
+
+    def hold_mode(self, refresh: bool = False) -> str:
+        """``'hedge_mode'`` or ``'one_way_mode'`` — read from the exchange, not assumed.
+
+        A one-way account answers a hedge-shaped body with
+        ``25200 SINGLE_SIDE_HOLD``; a hedge account needs the position side spelled
+        out. Guessing wrong means the order never leaves the client — and it stays
+        wrong every cycle, so the bot looks alive while never trading. Classic has
+        no such setting: it always carries ``holdSide``.
+        """
+        if not self.uta:
+            return "hedge_mode"
+        if self._hold_mode is None or refresh:
+            data = self._call("GET", "/api/v3/account/settings",
+                              {"productType": self.product_type}) or {}
+            raw = str(data.get("holdMode") or "").lower()
+            self._hold_mode = "hedge_mode" if "hedge" in raw else "one_way_mode"
+        return self._hold_mode
+
+    @property
+    def one_way(self) -> bool:
+        return self.hold_mode() == "one_way_mode"
+
+    def _post_adapted(self, path: str, build) -> Any:
+        """POST a UTA order, rebuilding the body if the hold mode moved underfoot.
+
+        ``build`` runs immediately before each attempt, so refreshing the cached
+        mode after a ``SINGLE_SIDE_HOLD`` rejection actually changes what gets
+        sent — the user can flip the mode in the app at any moment.
+        """
+        try:
+            return self._call("POST", path, body=build())
+        except BitgetError as exc:
+            if not _single_side_error(exc):
+                raise
+            self.hold_mode(refresh=True)
+            return self._call("POST", path, body=build())
 
     # ------------------------------------------------------------------ http
     def _call(self, method: str, path: str, query: dict | None = None,
@@ -240,13 +278,17 @@ class Bitget:
 
     def set_leverage(self, symbol: str, leverage: int, hold_side: str) -> Any:
         if self.uta:
-            # Hedge mode rejects ``leverage`` + ``posSide`` with 25200; both sides
-            # must be set together in one call.
-            return self._call("POST", "/api/v3/account/set-leverage", body={
-                "category": self.product_type, "symbol": symbol,
-                "marginMode": "isolated", "longLeverage": str(leverage),
-                "shortLeverage": str(leverage),
-            })
+            def build() -> dict[str, Any]:
+                # One-way accounts take a single `leverage`; hedge accounts want
+                # both sides set together (and reject `leverage` + `posSide` with
+                # 25200 — see docs/WRONG.md).
+                if self.one_way:
+                    return {"category": self.product_type, "symbol": symbol,
+                            "marginMode": "isolated", "leverage": str(leverage)}
+                return {"category": self.product_type, "symbol": symbol,
+                        "marginMode": "isolated", "longLeverage": str(leverage),
+                        "shortLeverage": str(leverage)}
+            return self._post_adapted("/api/v3/account/set-leverage", build)
         return self._call("POST", "/api/v2/mix/account/set-leverage", body={
             "symbol": symbol, "productType": self.product_type, "marginCoin": self.margin_coin,
             "leverage": str(leverage), "holdSide": hold_side,
@@ -267,26 +309,29 @@ class Bitget:
         position is naked — exactly the window in which markets tend to move.
         """
         if self.uta:
-            body: dict[str, Any] = {
-                "category": self.product_type, "symbol": symbol, "qty": _num(size),
-                "side": side, "orderType": order_type, "marginMode": margin_mode,
-                # hedge mode needs the position side spelled out; v3 has no
-                # `productType` and no `tradeSide`
-                "posSide": self._POS_SIDE[trade_side][side],
-            }
-            if trade_side == "close":
-                body["reduceOnly"] = "YES"
-            if price is not None:
-                body["price"] = _num(price)
-            if stop_loss is not None:
-                body["presetStopLossPrice"] = _num(stop_loss)
-                body["slTriggerBy"] = "mark"
-            if take_profit is not None:
-                body["presetStopSurplusPrice"] = _num(take_profit)
-                body["tpTriggerBy"] = "mark"
-            if client_oid:
-                body["clientOid"] = client_oid
-            return self._call("POST", "/api/v3/trade/place-order", body=body)
+            def build() -> dict[str, Any]:
+                body: dict[str, Any] = {
+                    "category": self.product_type, "symbol": symbol, "qty": _num(size),
+                    "side": side, "orderType": order_type, "marginMode": margin_mode,
+                }
+                # Hedge accounts require the position side; one-way accounts reject
+                # it with 25200 SINGLE_SIDE_HOLD. v3 has no `productType`.
+                if not self.one_way:
+                    body["posSide"] = self._POS_SIDE[trade_side][side]
+                if trade_side == "close":
+                    body["reduceOnly"] = "YES"
+                if price is not None:
+                    body["price"] = _num(price)
+                if stop_loss is not None:
+                    body["presetStopLossPrice"] = _num(stop_loss)
+                    body["slTriggerBy"] = "mark"
+                if take_profit is not None:
+                    body["presetStopSurplusPrice"] = _num(take_profit)
+                    body["tpTriggerBy"] = "mark"
+                if client_oid:
+                    body["clientOid"] = client_oid
+                return body
+            return self._post_adapted("/api/v3/trade/place-order", build)
 
         body = {
             "symbol": symbol, "productType": self.product_type, "marginCoin": self.margin_coin,
@@ -379,6 +424,16 @@ class Bitget:
             except (KeyError, TypeError, ValueError):
                 continue
         return out
+
+
+def _single_side_error(exc: Exception) -> bool:
+    """True for Bitget's ``25200 SINGLE_SIDE_HOLD``: a hedge body met a one-way account.
+
+    The account's hold mode can be flipped in the app at any moment, so this is a
+    recoverable, re-readable condition — not a reason to give up on the cycle.
+    """
+    text = f"{getattr(exc, 'code', '')} {exc}".upper()
+    return "25200" in text or "SINGLE_SIDE" in text
 
 
 def _num(value: float) -> str:

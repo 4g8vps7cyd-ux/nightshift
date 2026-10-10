@@ -415,13 +415,15 @@ class TestSimulatorInvariants(unittest.TestCase):
 class TestUtaApiVersion(unittest.TestCase):
     """The UTA (v3) branch: same rails, different account generation."""
 
-    def _client(self, version="uta", response=None):
+    def _client(self, version="uta", response=None, hold_mode="hedge_mode"):
         client = Bitget(Credentials("k", "s", "p"), api_version=version)
         seen = []
         payload = {} if response is None else response
 
         def fake(method, path, query=None, body=None, signed=True):
             seen.append({"method": method, "path": path, "query": query, "body": body})
+            if path == "/api/v3/account/settings":
+                return {"holdMode": hold_mode}
             return payload
 
         client._call = fake
@@ -460,6 +462,71 @@ class TestUtaApiVersion(unittest.TestCase):
         self.assertEqual(call["body"]["tradeSide"], "open")
         self.assertEqual(call["body"]["size"], "0.01")
         self.assertIn("productType", call["body"])
+
+    # ---------------------------------------------------------- one-way (single side)
+    def test_hold_mode_is_read_from_the_exchange(self):
+        client, seen = self._client(hold_mode="one_way_mode")
+        self.assertTrue(client.one_way)
+        self.assertEqual(seen[-1]["path"], "/api/v3/account/settings")
+
+    def test_one_way_place_order_omits_pos_side(self):
+        """A one-way account rejects `posSide` with 25200 SINGLE_SIDE_HOLD.
+
+        This is the bug that made the live loop look healthy while never opening a
+        position: the signal fired, the order was refused, and the cycle was logged
+        as an exchange error.
+        """
+        client, seen = self._client(hold_mode="one_way_mode")
+        client.place_order("SOLUSDT", "buy", 0.1, stop_loss=113.0)
+        body = seen[-1]["body"]
+        self.assertNotIn("posSide", body)
+        self.assertEqual(body["side"], "buy")
+        self.assertEqual(body["presetStopLossPrice"], "113")
+        self.assertEqual(seen[-1]["path"], "/api/v3/trade/place-order")
+
+    def test_one_way_close_still_reduces_only(self):
+        client, seen = self._client(hold_mode="one_way_mode")
+        client.place_order("SOLUSDT", "buy", 0.1, trade_side="close")
+        body = seen[-1]["body"]
+        self.assertNotIn("posSide", body)
+        self.assertEqual(body["reduceOnly"], "YES")
+
+    def test_one_way_set_leverage_sends_a_single_leverage(self):
+        client, seen = self._client(hold_mode="one_way_mode")
+        client.set_leverage("SOLUSDT", 100, "long")
+        body = seen[-1]["body"]
+        self.assertEqual(seen[-1]["path"], "/api/v3/account/set-leverage")
+        self.assertEqual(body["leverage"], "100")
+        self.assertNotIn("longLeverage", body)
+        self.assertNotIn("posSide", body)
+
+    def test_classic_never_asks_the_exchange_for_hold_mode(self):
+        client, seen = self._client(version="classic")
+        self.assertEqual(client.hold_mode(), "hedge_mode")
+        self.assertEqual(seen, [])              # no extra call on Classic
+
+    def test_single_side_rejection_refreshes_the_mode_and_retries(self):
+        """The stale-mode case: assume hedge, get 25200, re-read, then succeed."""
+        client = Bitget(Credentials("k", "s", "p"), api_version="uta")
+        bodies = []
+
+        def fake(method, path, query=None, body=None, signed=True):
+            if path == "/api/v3/account/settings":
+                return {"holdMode": "hedge_mode"}       # the account really is hedge
+            if path == "/api/v3/trade/place-order":
+                bodies.append(body)
+                if len(bodies) == 1:
+                    raise BitgetError("25200", "SINGLE_SIDE_HOLD afterLeverage none "
+                                               "validation error")
+                return {"orderId": "42"}
+            return {}
+
+        client._call = fake
+        client._hold_mode = "one_way_mode"              # stale cache says one-way
+        client.place_order("SOLUSDT", "buy", 0.1)
+        self.assertEqual(len(bodies), 2)
+        self.assertNotIn("posSide", bodies[0])          # first attempt: one-way shape
+        self.assertEqual(bodies[1]["posSide"], "long")  # after refresh: hedge shape
 
     def test_uta_set_leverage_sends_both_sides(self):
         client, seen = self._client()
